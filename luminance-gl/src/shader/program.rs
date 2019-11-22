@@ -378,8 +378,6 @@ where
 
   type Err = ProgramError;
 
-  type UniformBuilder = UniformBuilder<'program>;
-
   type ProgramInterface = ProgramInterface<'program, Uni>;
 
   fn from_stages_env<T, G, E>(
@@ -416,23 +414,18 @@ where
     Program::link(self)
   }
 
-  fn uniform_builder(&'program self) -> Self::UniformBuilder {
-    Program::uniform_builder(self)
-  }
-
   fn interface(&'program self) -> Self::ProgramInterface {
     Program::interface(self)
   }
 
-  fn adapt_env<'a, P, Q, E>(
+  fn readapt_env<E>(
     self,
     env: E,
-  ) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
+  ) -> Result<BuiltProgram<Self, Self::Err>, AdaptationFailure<Self, Self::Err>>
   where
-    P: ProgramBackend<'a, S, Out, Q>,
-    Q: UniformInterface<E>,
+    Uni: UniformInterface<E>,
   {
-    Program::adapt_env(self, env)
+    Program::readapt_env(self, env)
   }
 }
 
@@ -558,9 +551,15 @@ where
   }
 }
 
-struct ProgramInterface<'a, Uni> {
+pub struct ProgramInterface<'a, Uni> {
   program: &'a RawProgram,
   interface: &'a Uni,
+}
+
+impl<'a, Uni> ProgramInterface<'a, Uni> {
+  pub fn query(&self) -> UniformBuilder {
+    UniformBuilder::new(self.program)
+  }
 }
 
 impl<'a, Uni> ProgramInterfaceBackend<'a, Uni> for ProgramInterface<'a, Uni> {

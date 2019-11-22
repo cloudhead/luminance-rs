@@ -238,8 +238,6 @@ pub trait Program<'program, S, Out, Uni>: Sized {
 
   type Err;
 
-  type UniformBuilder: UniformBuilder;
-
   type ProgramInterface: ProgramInterface<'program, Uni>;
 
   fn from_stages_env<T, G, E>(
@@ -296,8 +294,6 @@ pub trait Program<'program, S, Out, Uni>: Sized {
 
   fn link(&'program self) -> Result<(), Self::Err>;
 
-  fn uniform_builder(&'program self) -> Self::UniformBuilder;
-
   fn interface(&'program self) -> Self::ProgramInterface;
 
   /// Transform the program to adapt the uniform interface by looking up an environment.
@@ -306,41 +302,12 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   /// uniform interface and if the new uniform interface is correctly generated, return the same
   /// shader program updated with the new uniform interface. If the generation of the new uniform
   /// interface fails, this function will return the program with the former uniform interface.
-  fn adapt_env<'a, P, Q, E>(
-    self,
-    env: E,
-  ) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
-  where
-    P: Program<'a, S, Out, Q>,
-    Q: UniformInterface<E>;
-
-  /// Transform the program to adapt the uniform interface.
-  ///
-  /// This function will not re-allocate nor recreate the GPU data. It will try to change the
-  /// uniform interface and if the new uniform interface is correctly generated, return the same
-  /// shader program updated with the new uniform interface. If the generation of the new uniform
-  /// interface fails, this function will return the program with the former uniform interface.
-  fn adapt<'a, P, Q>(self) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
-  where
-    P: Program<'a, S, Out, Q>,
-    Q: UniformInterface,
-  {
-    Program::adapt_env(self, ())
-  }
-
-  /// A version of [`Program::adapt_env`] that doesn’t change the uniform interface type.
-  ///
-  /// This function might be needed for when you want to update the uniform interface but still
-  /// enforce that the type must remain the same.
   fn readapt_env<E>(
     self,
     env: E,
   ) -> Result<BuiltProgram<Self, Self::Err>, AdaptationFailure<Self, Self::Err>>
   where
-    Uni: UniformInterface<E>,
-  {
-    Program::adapt_env(self, env)
-  }
+    Uni: UniformInterface<E>;
 }
 
 pub trait ProgramInterface<'a, Uni>
