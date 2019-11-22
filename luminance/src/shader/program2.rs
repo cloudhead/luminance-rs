@@ -1,5 +1,4 @@
 use std::fmt;
-use std::marker::PhantomData;
 use std::ops::Deref;
 
 /// Types that can behave as `Uniform`.
@@ -192,9 +191,46 @@ where
   pub evaluation: &'a T,
 }
 
+/// A built program with potential warnings.
+///
+/// The sole purpose of this type is to be destructured when a program is built.
 pub struct BuiltProgram<P, W> {
+  /// Built program.
   pub program: P,
+  /// Potential warnings.
   pub warnings: Vec<W>,
+}
+
+impl<P, W> BuiltProgram<P, W> {
+  /// Get the program and ignore the warnings.
+  pub fn ignore_warnings(self) -> P {
+    self.program
+  }
+
+  /// Get the warnings and ignore the program.
+  pub fn ignore_program(self) -> Vec<W> {
+    self.warnings
+  }
+}
+
+/// A [`Program`] uniform adaptation that has failed.
+pub struct AdaptationFailure<P, E> {
+  /// Program used before trying to adapt.
+  pub program: P,
+  /// Program error that prevented to adapt.
+  pub error: E,
+}
+
+impl<P, E> AdaptationFailure<P, E> {
+  /// Get the program and ignore the error.
+  pub fn ignore_error(self) -> P {
+    self.program
+  }
+
+  /// Get the error and ignore the program.
+  pub fn ignore_program(self) -> E {
+    self.error
+  }
 }
 
 pub trait Program<'program, S, Out, Uni>: Sized {
@@ -203,6 +239,8 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   type Err;
 
   type UniformBuilder: UniformBuilder;
+
+  type ProgramInterface: ProgramInterface<'program, Uni>;
 
   fn from_stages_env<T, G, E>(
     vertex: &Self::Stage,
@@ -213,7 +251,8 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>
   where
     T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
-    G: for<'a> Into<Option<&'a Self::Stage>>;
+    G: for<'a> Into<Option<&'a Self::Stage>>,
+    Uni: UniformInterface<E>;
 
   fn from_stages<T, G>(
     vertex: &Self::Stage,
@@ -224,6 +263,7 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
     G: for<'a> Into<Option<&'a Self::Stage>>,
+    Uni: UniformInterface,
   {
     Self::from_stages_env(vertex, tess, geometry, fragment, ())
   }
@@ -234,7 +274,11 @@ pub trait Program<'program, S, Out, Uni>: Sized {
     geometry: G,
     fragment: &str,
     env: E,
-  ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>;
+  ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>
+  where
+    T: for<'a> Into<Option<TessellationStages<'a, str>>>,
+    G: for<'a> Into<Option<&'a str>>,
+    Uni: UniformInterface<E>;
 
   fn from_strings<T, G>(
     vertex: &str,
@@ -245,6 +289,7 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, str>>>,
     G: for<'a> Into<Option<&'a str>>,
+    Uni: UniformInterface,
   {
     Self::from_strings_env(vertex, tess, geometry, fragment, ())
   }
@@ -253,35 +298,56 @@ pub trait Program<'program, S, Out, Uni>: Sized {
 
   fn uniform_builder(&'program self) -> Self::UniformBuilder;
 
-  fn interface(&'program self) -> ProgramInterface<'program, Self, S, Out, Uni>;
-}
+  fn interface(&'program self) -> Self::ProgramInterface;
 
-pub struct ProgramInterface<'program, P, S, Out, Uni>
-where
-  P: Program<'program, S, Out, Uni>,
-{
-  program: &'program P,
-  interface: &'program Uni,
-  _s: PhantomData<&'program S>,
-  _out: PhantomData<&'program Out>,
-}
+  /// Transform the program to adapt the uniform interface by looking up an environment.
+  ///
+  /// This function will not re-allocate nor recreate the GPU data. It will try to change the
+  /// uniform interface and if the new uniform interface is correctly generated, return the same
+  /// shader program updated with the new uniform interface. If the generation of the new uniform
+  /// interface fails, this function will return the program with the former uniform interface.
+  fn adapt_env<'a, P, Q, E>(
+    self,
+    env: E,
+  ) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
+  where
+    P: Program<'a, S, Out, Q>,
+    Q: UniformInterface<E>;
 
-impl<'program, P, S, Out, Uni> ProgramInterface<'program, P, S, Out, Uni>
-where
-  P: Program<'program, S, Out, Uni>,
-{
-  pub fn query(&'program self) -> P::UniformBuilder {
-    self.program.uniform_builder()
+  /// Transform the program to adapt the uniform interface.
+  ///
+  /// This function will not re-allocate nor recreate the GPU data. It will try to change the
+  /// uniform interface and if the new uniform interface is correctly generated, return the same
+  /// shader program updated with the new uniform interface. If the generation of the new uniform
+  /// interface fails, this function will return the program with the former uniform interface.
+  fn adapt<'a, P, Q>(self) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
+  where
+    P: Program<'a, S, Out, Q>,
+    Q: UniformInterface,
+  {
+    Program::adapt_env(self, ())
+  }
+
+  /// A version of [`Program::adapt_env`] that doesn’t change the uniform interface type.
+  ///
+  /// This function might be needed for when you want to update the uniform interface but still
+  /// enforce that the type must remain the same.
+  fn readapt_env<E>(
+    self,
+    env: E,
+  ) -> Result<BuiltProgram<Self, Self::Err>, AdaptationFailure<Self, Self::Err>>
+  where
+    Uni: UniformInterface<E>,
+  {
+    Program::adapt_env(self, env)
   }
 }
 
-impl<'program, P, S, Out, Uni> Deref for ProgramInterface<'program, P, S, Out, Uni>
+pub trait ProgramInterface<'a, Uni>
 where
-  P: Program<'program, S, Out, Uni>,
+  Self: Deref<Target = Uni>,
 {
-  type Target = Uni;
+  type UniformBuilder: UniformBuilder;
 
-  fn deref(&self) -> &Self::Target {
-    &self.interface
-  }
+  fn query(&'a self) -> Self::UniformBuilder;
 }

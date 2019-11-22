@@ -1,6 +1,7 @@
 use gl;
 use gl::types::*;
 use luminance::shader::program2::{
+  AdaptationFailure, BuiltProgram, Program as ProgramBackend,
   ProgramInterface as ProgramInterfaceBackend, TessellationStages, Type as UniformType,
   UniformBuild, UniformBuilder as UniformBuilderBackend, UniformInterface, Uniformable,
 };
@@ -58,25 +59,6 @@ impl fmt::Display for VertexAttribWarning {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
       VertexAttribWarning::Inactive(ref s) => write!(f, "inactive {} vertex attribute", s),
-    }
-  }
-}
-
-/// Program warnings, not necessarily considered blocking errors.
-#[derive(Debug)]
-pub enum ProgramWarning {
-  /// Some uniform configuration is ill-formed. It can be a problem of inactive uniform, mismatch
-  /// type, etc. Check the `UniformWarning` type for more information.
-  Uniform(UniformWarning),
-  /// Some vertex attribute is ill-formed.
-  VertexAttrib(VertexAttribWarning),
-}
-
-impl fmt::Display for ProgramWarning {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      ProgramWarning::Uniform(ref e) => write!(f, "uniform warning: {}", e),
-      ProgramWarning::VertexAttrib(ref e) => write!(f, "vertex attribute warning: {}", e),
     }
   }
 }
@@ -177,36 +159,6 @@ impl<S, Out, Uni> Program<S, Out, Uni>
 where
   S: Semantics,
 {
-  /// Create a new program by consuming `Stage`s.
-  pub fn from_stages<'a, T, G>(
-    tess: T,
-    vertex: &'a Stage,
-    geometry: G,
-    fragment: &'a Stage,
-  ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where
-    Uni: UniformInterface,
-    T: Into<Option<TessellationStages<'a, Stage>>>,
-    G: Into<Option<&'a Stage>>,
-  {
-    Self::from_stages_env(vertex, tess, geometry, fragment, ())
-  }
-
-  /// Create a new program by consuming strings.
-  pub fn from_strings<'a, T, G>(
-    tess: T,
-    vertex: &'a str,
-    geometry: G,
-    fragment: &'a str,
-  ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where
-    Uni: UniformInterface,
-    T: Into<Option<TessellationStages<'a, str>>>,
-    G: Into<Option<&'a str>>,
-  {
-    Self::from_strings_env(vertex, tess, geometry, fragment, ())
-  }
-
   /// Create a new program by consuming `Stage`s and by looking up an environment.
   pub fn from_stages_env<'a, E, T, G>(
     vertex: &'a Stage,
@@ -214,7 +166,7 @@ where
     geometry: G,
     fragment: &'a Stage,
     env: E,
-  ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
+  ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
     Uni: UniformInterface<E>,
     T: Into<Option<TessellationStages<'a, Stage>>>,
@@ -227,7 +179,11 @@ where
     raw.link()?;
 
     let (uni_iface, uniform_warnings) = create_uniform_interface(&raw, env)?;
-    warnings.extend(uniform_warnings.into_iter().map(ProgramWarning::Uniform));
+    warnings.extend(
+      uniform_warnings
+        .into_iter()
+        .map(ProgramError::UniformWarning),
+    );
 
     let program = Program {
       raw,
@@ -239,6 +195,21 @@ where
     Ok(BuiltProgram { program, warnings })
   }
 
+  /// Create a new program by consuming `Stage`s.
+  pub fn from_stages<'a, T, G>(
+    tess: T,
+    vertex: &'a Stage,
+    geometry: G,
+    fragment: &'a Stage,
+  ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
+  where
+    Uni: UniformInterface,
+    T: Into<Option<TessellationStages<'a, Stage>>>,
+    G: Into<Option<&'a Stage>>,
+  {
+    Self::from_stages_env(vertex, tess, geometry, fragment, ())
+  }
+
   /// Create a new program by consuming strings.
   pub fn from_strings_env<'a, E, T, G>(
     vertex: &'a str,
@@ -246,7 +217,7 @@ where
     geometry: G,
     fragment: &'a str,
     env: E,
-  ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
+  ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
     Uni: UniformInterface<E>,
     T: Into<Option<TessellationStages<'a, str>>>,
@@ -292,15 +263,27 @@ where
     )
   }
 
+  /// Create a new program by consuming strings.
+  pub fn from_strings<'a, T, G>(
+    tess: T,
+    vertex: &'a str,
+    geometry: G,
+    fragment: &'a str,
+  ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
+  where
+    Uni: UniformInterface,
+    T: Into<Option<TessellationStages<'a, str>>>,
+    G: Into<Option<&'a str>>,
+  {
+    Self::from_strings_env(vertex, tess, geometry, fragment, ())
+  }
+
   /// Get the program interface associated with this program.
   pub(crate) fn interface(&self) -> ProgramInterface<Uni> {
-    let raw_program = &self.raw;
-    let uniform_interface = &self.uni_iface;
+    let program = &self.raw;
+    let interface = &self.uni_iface;
 
-    ProgramInterface {
-      raw_program,
-      uniform_interface,
-    }
+    ProgramInterface { program, interface }
   }
 
   /// Transform the program to adapt the uniform interface.
@@ -309,7 +292,9 @@ where
   /// uniform interface and if the new uniform interface is correctly generated, return the same
   /// shader program updated with the new uniform interface. If the generation of the new uniform
   /// interface fails, this function will return the program with the former uniform interface.
-  pub fn adapt<Q>(self) -> Result<BuiltProgram<S, Out, Q>, AdaptationFailure<S, Out, Uni>>
+  pub fn adapt<Q>(
+    self,
+  ) -> Result<BuiltProgram<Program<S, Out, Q>, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
     Q: UniformInterface,
   {
@@ -325,7 +310,7 @@ where
   pub fn adapt_env<Q, E>(
     self,
     env: E,
-  ) -> Result<BuiltProgram<S, Out, Q>, AdaptationFailure<S, Out, Uni>>
+  ) -> Result<BuiltProgram<Program<S, Out, Q>, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
     Q: UniformInterface<E>,
   {
@@ -341,7 +326,10 @@ where
           _in: PhantomData,
           _out: PhantomData,
         };
-        let warnings = warnings.into_iter().map(ProgramWarning::Uniform).collect();
+        let warnings = warnings
+          .into_iter()
+          .map(ProgramError::UniformWarning)
+          .collect();
 
         Ok(BuiltProgram { program, warnings })
       }
@@ -365,7 +353,7 @@ where
   pub fn readapt_env<E>(
     self,
     env: E,
-  ) -> Result<BuiltProgram<S, Out, Uni>, AdaptationFailure<S, Out, Uni>>
+  ) -> Result<BuiltProgram<Self, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
     Uni: UniformInterface<E>,
   {
@@ -381,35 +369,70 @@ impl<S, Out, Uni> Deref for Program<S, Out, Uni> {
   }
 }
 
-/// A built program with potential warnings.
-///
-/// The sole purpose of this type is to be destructured when a program is built.
-pub struct BuiltProgram<S, Out, Uni> {
-  /// Built program.
-  pub program: Program<S, Out, Uni>,
-  /// Potential warnings.
-  pub warnings: Vec<ProgramWarning>,
-}
+impl<'program, S, Out, Uni> ProgramBackend<'program, S, Out, Uni> for Program<S, Out, Uni>
+where
+  S: Semantics,
+  Uni: 'program,
+{
+  type Stage = Stage;
 
-impl<S, Out, Uni> BuiltProgram<S, Out, Uni> {
-  /// Get the program and ignore the warnings.
-  pub fn ignore_warnings(self) -> Program<S, Out, Uni> {
-    self.program
+  type Err = ProgramError;
+
+  type UniformBuilder = UniformBuilder<'program>;
+
+  type ProgramInterface = ProgramInterface<'program, Uni>;
+
+  fn from_stages_env<T, G, E>(
+    vertex: &Self::Stage,
+    tess: T,
+    geometry: G,
+    fragment: &Self::Stage,
+    env: E,
+  ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>
+  where
+    T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
+    G: for<'a> Into<Option<&'a Self::Stage>>,
+    Uni: UniformInterface<E>,
+  {
+    Program::from_stages_env(vertex, tess, geometry, fragment, env)
   }
-}
 
-/// A [`Program`] uniform adaptation that has failed.
-pub struct AdaptationFailure<S, Out, Uni> {
-  /// Program used before trying to adapt.
-  pub program: Program<S, Out, Uni>,
-  /// Program error that prevented to adapt.
-  pub error: ProgramError,
-}
+  fn from_strings_env<T, G, E>(
+    vertex: &str,
+    tess: T,
+    geometry: G,
+    fragment: &str,
+    env: E,
+  ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>
+  where
+    Uni: UniformInterface<E>,
+    T: for<'a> Into<Option<TessellationStages<'a, str>>>,
+    G: for<'a> Into<Option<&'a str>>,
+  {
+    Program::from_strings_env(vertex, tess, geometry, fragment, env)
+  }
 
-impl<S, Out, Uni> AdaptationFailure<S, Out, Uni> {
-  /// Get the program and ignore the error.
-  pub fn ignore_error(self) -> Program<S, Out, Uni> {
-    self.program
+  fn link(&'program self) -> Result<(), Self::Err> {
+    Program::link(self)
+  }
+
+  fn uniform_builder(&'program self) -> Self::UniformBuilder {
+    Program::uniform_builder(self)
+  }
+
+  fn interface(&'program self) -> Self::ProgramInterface {
+    Program::interface(self)
+  }
+
+  fn adapt_env<'a, P, Q, E>(
+    self,
+    env: E,
+  ) -> Result<BuiltProgram<P, P::Err>, AdaptationFailure<P, P::Err>>
+  where
+    P: ProgramBackend<'a, S, Out, Q>,
+    Q: UniformInterface<E>,
+  {
+    Program::adapt_env(self, env)
   }
 }
 
@@ -535,33 +558,26 @@ where
   }
 }
 
-pub struct ProgramInterface<'a, Uni> {
-  raw_program: &'a RawProgram,
-  uniform_interface: &'a Uni,
+struct ProgramInterface<'a, Uni> {
+  program: &'a RawProgram,
+  interface: &'a Uni,
+}
+
+impl<'a, Uni> ProgramInterfaceBackend<'a, Uni> for ProgramInterface<'a, Uni> {
+  type UniformBuilder = UniformBuilder<'a>;
+
+  fn query(&'a self) -> UniformBuilder<'a> {
+    ProgramInterface::query(self)
+  }
 }
 
 impl<'a, Uni> Deref for ProgramInterface<'a, Uni> {
   type Target = Uni;
 
   fn deref(&self) -> &Self::Target {
-    self.uniform_interface
+    &self.interface
   }
 }
-
-impl<'a, Uni> ProgramInterface<'a, Uni> {
-  /// Get a [`UniformBuilder`] in order to perform dynamic uniform lookup.
-  pub fn query(&'a self) -> UniformBuilder<'a> {
-    UniformBuilder::new(self.raw_program)
-  }
-}
-
-//impl<'a, Uni> ProgramInterfaceBackend<'a, Uni> for ProgramInterface<'a, Uni> {
-//  type UniformBuilder = UniformBuilder<'a>;
-//
-//  fn query(&'a self) -> Self::UniformBuilder {
-//    ProgramInterface::query(self)
-//  }
-//}
 
 /// Warnings related to uniform issues.
 #[derive(Debug)]
@@ -734,7 +750,7 @@ where
   Ok((iface, builder.warnings))
 }
 
-fn bind_vertex_attribs_locations<S>(raw: &RawProgram) -> Vec<ProgramWarning>
+fn bind_vertex_attribs_locations<S>(raw: &RawProgram) -> Vec<ProgramError>
 where
   S: Semantics,
 {
@@ -751,7 +767,7 @@ where
         unsafe { gl::BindAttribLocation(raw.handle, index, c_name.as_ptr() as *const GLchar) };
       }
 
-      Err(warning) => warnings.push(ProgramWarning::VertexAttrib(warning)),
+      Err(warning) => warnings.push(ProgramError::VertexAttribWarning(warning)),
     }
   }
 
