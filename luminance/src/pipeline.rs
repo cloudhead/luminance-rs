@@ -95,25 +95,10 @@
 //! A pipeline is just an aggregation of shadings commands with a few extra information. It
 //! especially gives you the power to scope-bind GPU resources.
 
-#[cfg(feature = "std")]
 use std::cell::RefCell;
-#[cfg(feature = "std")]
 use std::marker::PhantomData;
-#[cfg(feature = "std")]
 use std::ops::Deref;
-#[cfg(feature = "std")]
 use std::rc::Rc;
-
-#[cfg(not(feature = "std"))]
-use alloc::rc::Rc;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::cell::RefCell;
-#[cfg(not(feature = "std"))]
-use core::marker::PhantomData;
-#[cfg(not(feature = "std"))]
-use core::ops::Deref;
 
 use crate::blending::BlendingState;
 use crate::buffer::{Buffer, RawBuffer};
@@ -124,7 +109,9 @@ use crate::framebuffer::{ColorSlot, DepthSlot, Framebuffer};
 use crate::metagl::*;
 use crate::pixel::{Pixel, SamplerType, Type as PxType};
 use crate::render_state::RenderState;
-use crate::shader::program::{Program, ProgramInterface, Type, Uniform, UniformInterface, Uniformable};
+use crate::shader::program::{
+  Program, ProgramInterface, Type, Uniform, UniformInterface, Uniformable,
+};
 use crate::state::GraphicsState;
 use crate::tess::TessSlice;
 use crate::texture::{Dim, Dimensionable, Layerable, Texture};
@@ -157,13 +144,19 @@ impl BindingStack {
 }
 
 /// An opaque type used to create pipelines.
-pub struct Builder<'a, C> where C: ?Sized {
+pub struct Builder<'a, C>
+where
+  C: ?Sized,
+{
   ctx: &'a mut C,
   binding_stack: Rc<RefCell<BindingStack>>,
   _borrow: PhantomData<&'a mut ()>,
 }
 
-impl<'a, C> Builder<'a, C> where C: ?Sized + GraphicsContext {
+impl<'a, C> Builder<'a, C>
+where
+  C: ?Sized + GraphicsContext,
+{
   /// Create a new `Builder`.
   ///
   /// Even though you call this function by yourself, you’re likely to prefer using
@@ -195,19 +188,32 @@ impl<'a, C> Builder<'a, C> where C: ?Sized + GraphicsContext {
     framebuffer: &Framebuffer<L, D, CS, DS>,
     clear_color: [f32; 4],
     f: F,
-  )
-  where L: Layerable,
-        D: Dimensionable,
-        CS: ColorSlot<L, D>,
-        DS: DepthSlot<L, D>,
-        F: FnOnce(Pipeline<'b>, ShadingGate<'b, C>) {
+  ) where
+    L: Layerable,
+    D: Dimensionable,
+    CS: ColorSlot<L, D>,
+    DS: DepthSlot<L, D>,
+    F: FnOnce(Pipeline<'b>, ShadingGate<'b, C>),
+  {
     unsafe {
-      self.ctx.state()
+      self
+        .ctx
+        .state()
         .borrow_mut()
         .bind_draw_framebuffer(framebuffer.handle());
 
-      gl::Viewport(0, 0, framebuffer.width() as GLint, framebuffer.height() as GLint);
-      gl::ClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+      gl::Viewport(
+        0,
+        0,
+        framebuffer.width() as GLint,
+        framebuffer.height() as GLint,
+      );
+      gl::ClearColor(
+        clear_color[0],
+        clear_color[1],
+        clear_color[2],
+        clear_color[3],
+      );
       gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
@@ -215,7 +221,7 @@ impl<'a, C> Builder<'a, C> where C: ?Sized + GraphicsContext {
     let p = Pipeline { binding_stack };
     let shd_gt = ShadingGate {
       ctx: self.ctx,
-      binding_stack
+      binding_stack,
     };
 
     f(p, shd_gt);
@@ -238,9 +244,11 @@ impl<'a> Pipeline<'a> {
     &'a self,
     texture: &'a Texture<L, D, P>,
   ) -> BoundTexture<'a, L, D, P::SamplerType>
-  where L: 'a + Layerable,
-        D: 'a + Dimensionable,
-        P: 'a + Pixel {
+  where
+    L: 'a + Layerable,
+    D: 'a + Dimensionable,
+    P: 'a + Pixel,
+  {
     let mut bstack = self.binding_stack.borrow_mut();
 
     let unit = bstack.free_texture_units.pop().unwrap_or_else(|| {
@@ -263,7 +271,9 @@ impl<'a> Pipeline<'a> {
   ///
   /// The buffer remains bound as long as the return value lives.
   pub fn bind_buffer<T>(&'a self, buffer: &'a T) -> BoundBuffer<'a, T>
-  where T: Deref<Target = RawBuffer> {
+  where
+    T: Deref<Target = RawBuffer>,
+  {
     let mut bstack = self.binding_stack.borrow_mut();
 
     let binding = bstack.free_buffer_bindings.pop().unwrap_or_else(|| {
@@ -287,18 +297,22 @@ impl<'a> Pipeline<'a> {
 /// An opaque type representing a bound texture in a `Builder`. You may want to pass such an object
 /// to a shader’s uniform’s update.
 pub struct BoundTexture<'a, L, D, S>
-where L: 'a + Layerable,
-      D: 'a + Dimensionable,
-      S: 'a + SamplerType, {
+where
+  L: 'a + Layerable,
+  D: 'a + Dimensionable,
+  S: 'a + SamplerType,
+{
   unit: u32,
   binding_stack: &'a Rc<RefCell<BindingStack>>,
   _t: PhantomData<&'a (L, D, S)>,
 }
 
 impl<'a, L, D, S> BoundTexture<'a, L, D, S>
-where L: 'a + Layerable,
-      D: 'a + Dimensionable,
-      S: 'a + SamplerType {
+where
+  L: 'a + Layerable,
+  D: 'a + Dimensionable,
+  S: 'a + SamplerType,
+{
   fn new(binding_stack: &'a Rc<RefCell<BindingStack>>, unit: u32) -> Self {
     BoundTexture {
       unit,
@@ -309,9 +323,11 @@ where L: 'a + Layerable,
 }
 
 impl<'a, L, D, S> Drop for BoundTexture<'a, L, D, S>
-where L: 'a + Layerable,
-      D: 'a + Dimensionable,
-      S: 'a + SamplerType {
+where
+  L: 'a + Layerable,
+  D: 'a + Dimensionable,
+  S: 'a + SamplerType,
+{
   fn drop(&mut self) {
     let mut bstack = self.binding_stack.borrow_mut();
     // place the unit into the free list
@@ -320,9 +336,11 @@ where L: 'a + Layerable,
 }
 
 unsafe impl<'a, 'b, L, D, S> Uniformable for &'b BoundTexture<'a, L, D, S>
-where L: 'a + Layerable,
-      D: 'a + Dimensionable,
-      S: 'a + SamplerType {
+where
+  L: 'a + Layerable,
+  D: 'a + Dimensionable,
+  S: 'a + SamplerType,
+{
   fn update(self, u: &Uniform<Self>) {
     unsafe { gl::Uniform1i(u.index(), self.unit as GLint) }
   }
@@ -358,7 +376,10 @@ where L: 'a + Layerable,
 
 /// An opaque type representing a bound buffer in a `Builder`. You may want to pass such an object
 /// to a shader’s uniform’s update.
-pub struct BoundBuffer<'a, T> where T: 'a {
+pub struct BoundBuffer<'a, T>
+where
+  T: 'a,
+{
   binding: u32,
   binding_stack: &'a Rc<RefCell<BindingStack>>,
   _t: PhantomData<&'a Buffer<T>>,
@@ -393,17 +414,25 @@ unsafe impl<'a, 'b, T> Uniformable for &'b BoundBuffer<'a, T> {
 }
 
 /// A shading gate provides you with a way to run shaders on rendering commands.
-pub struct ShadingGate<'a, C> where C: ?Sized {
+pub struct ShadingGate<'a, C>
+where
+  C: ?Sized,
+{
   ctx: &'a mut C,
   binding_stack: &'a Rc<RefCell<BindingStack>>,
 }
 
-impl<'a, C> ShadingGate<'a, C> where C: ?Sized + GraphicsContext {
+impl<'a, C> ShadingGate<'a, C>
+where
+  C: ?Sized + GraphicsContext,
+{
   /// Run a shader on a set of rendering commands.
   pub fn shade<'b, In, Out, Uni, F>(&'b mut self, program: &Program<In, Out, Uni>, f: F)
-  where In: Semantics,
-        Uni: UniformInterface,
-        F: FnOnce(ProgramInterface<Uni>, RenderGate<'b, C>) {
+  where
+    In: Semantics,
+    Uni: UniformInterface,
+    F: FnOnce(ProgramInterface<Uni>, RenderGate<'b, C>),
+  {
     unsafe {
       let bstack = self.binding_stack.borrow_mut();
       bstack.state.borrow_mut().use_program(program.handle());
@@ -420,14 +449,23 @@ impl<'a, C> ShadingGate<'a, C> where C: ?Sized + GraphicsContext {
 }
 
 /// Render gate, allowing you to alter the render state and render tessellations.
-pub struct RenderGate<'a, C> where C: ?Sized {
+pub struct RenderGate<'a, C>
+where
+  C: ?Sized,
+{
   ctx: &'a mut C,
   binding_stack: &'a Rc<RefCell<BindingStack>>,
 }
 
-impl<'a, C> RenderGate<'a, C> where C: ?Sized + GraphicsContext {
+impl<'a, C> RenderGate<'a, C>
+where
+  C: ?Sized + GraphicsContext,
+{
   /// Alter the render state and draw tessellations.
-  pub fn render<'b, F>(&'b mut self, rdr_st: RenderState, f: F) where F: FnOnce(TessGate<'b, C>) {
+  pub fn render<'b, F>(&'b mut self, rdr_st: RenderState, f: F)
+  where
+    F: FnOnce(TessGate<'b, C>),
+  {
     unsafe {
       let bstack = self.binding_stack.borrow_mut();
       let mut gfx_state = bstack.state.borrow_mut();
@@ -462,22 +500,29 @@ impl<'a, C> RenderGate<'a, C> where C: ?Sized + GraphicsContext {
       }
     }
 
-    let tess_gate = TessGate {
-      ctx: self.ctx,
-    };
+    let tess_gate = TessGate { ctx: self.ctx };
 
     f(tess_gate);
   }
 }
 
 /// Render tessellations.
-pub struct TessGate<'a, C> where C: ?Sized {
+pub struct TessGate<'a, C>
+where
+  C: ?Sized,
+{
   ctx: &'a mut C,
 }
 
-impl<'a, C> TessGate<'a, C> where C: ?Sized + GraphicsContext {
+impl<'a, C> TessGate<'a, C>
+where
+  C: ?Sized + GraphicsContext,
+{
   /// Render a tessellation.
-  pub fn render<'b, T>(&'b mut self, tess: T) where T: Into<TessSlice<'b>> {
+  pub fn render<'b, T>(&'b mut self, tess: T)
+  where
+    T: Into<TessSlice<'b>>,
+  {
     tess.into().render(self.ctx);
   }
 }
