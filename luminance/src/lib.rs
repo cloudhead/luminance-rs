@@ -405,7 +405,7 @@ pub mod depth_test;
 pub mod face_culling;
 pub mod framebuffer;
 pub mod linear;
-// pub mod pipeline;
+pub mod pipeline2;
 pub mod pixel;
 pub mod render_state;
 pub mod shader;
