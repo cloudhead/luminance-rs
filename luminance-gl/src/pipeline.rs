@@ -1,9 +1,10 @@
 use gl;
 use gl::types::*;
 use luminance::context::GraphicsContext;
-use luminance::pipeline2::{Bind, Pipeline as PipelineBackend};
+use luminance::pipeline2::{Bind, Pipeline as PipelineBackend, TessGate as TessGateBackend};
 use luminance::pixel::{Pixel, SamplerType, Type as PxType};
 use luminance::shader::program2::{Type as UniformType, Uniformable};
+use luminance::tess::TessSlice;
 use luminance::texture::{Dim, Dimensionable, Layerable};
 
 use std::cell::RefCell;
@@ -14,6 +15,7 @@ use crate::buffer::{Buffer, RawBuffer};
 use crate::framebuffer::Framebuffer;
 use crate::shader::program::Uniform;
 use crate::state::GraphicsState;
+use crate::tess::Tess;
 use crate::texture::Texture;
 
 // A stack of bindings.
@@ -231,5 +233,24 @@ unsafe impl<'a, 'b, T> Uniformable<&'b BoundBuffer<'a, T>> for Uniform<&'b Bound
         buffer.binding as GLuint,
       )
     }
+  }
+}
+
+/// Render tessellations.
+pub struct TessGate<'a, C> {
+  ctx: &'a mut C,
+}
+
+impl<'a, C> TessGateBackend<'a, C> for TessGate<'a, C>
+where
+  C: GraphicsContext<State = GraphicsState>,
+{
+  type Tess = Tess;
+
+  fn render<T>(&'a mut self, tess_slice: T)
+  where
+    T: TessSlice<'a, C, Self::Tess>,
+  {
+    tess_slice.render(self.ctx);
   }
 }

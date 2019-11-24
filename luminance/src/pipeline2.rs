@@ -1,6 +1,7 @@
 use crate::context::GraphicsContext;
 use crate::framebuffer::{ColorSlot, DepthSlot, Framebuffer};
 use crate::pixel::Pixel;
+use crate::tess::{Tess, TessSlice};
 use crate::texture::{Dimensionable, Layerable, Texture};
 
 pub trait Builder<'a, C>
@@ -52,20 +53,10 @@ pub trait Bind<'a, T> {
   fn bind(&'a self, resource: &'a T) -> Result<Self::Bound, Self::Err>;
 }
 
-//pub trait BindTexture<C, L, D, P>
-//where
-//  D: Dimensionable,
-//  L: Layerable,
-//  P: Pixel,
-//{
-//  type Texture: Texture<C, L, D, P>;
-//
-//  type BoundTexture;
-//
-//  type Err;
-//
-//  fn bind_texture<'a>(
-//    &'a self,
-//    texture: &'a Self::Texture,
-//  ) -> Result<Self::BoundTexture, Self::Err>;
-//}
+pub trait TessGate<'a, C> {
+  type Tess: Tess<C>;
+
+  fn render<T>(&'a mut self, tess_slice: T)
+  where
+    T: TessSlice<'a, C, Self::Tess>;
+}
