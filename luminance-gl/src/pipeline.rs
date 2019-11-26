@@ -6,7 +6,6 @@ use luminance::pixel::{Pixel, SamplerType, Type as PxType};
 use luminance::shader::program2::{Type as UniformType, Uniformable};
 use luminance::tess::TessSlice;
 use luminance::texture::{Dim, Dimensionable, Layerable};
-
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -40,6 +39,34 @@ impl BindingStack {
       free_texture_units: Vec::new(),
       next_buffer_binding: 0,
       free_buffer_bindings: Vec::new(),
+    }
+  }
+}
+
+pub struct Builder<'a, C>
+where
+  C: ?Sized,
+{
+  ctx: &'a mut C,
+  binding_stack: Rc<RefCell<BindingStack>>,
+  _borrow: PhantomData<&'a mut ()>,
+}
+
+impl<'a, C> Builder<'a, C>
+where
+  C: ?Sized + GraphicsContext<State = GraphicsState>,
+{
+  /// Create a new `Builder`.
+  ///
+  /// Even though you call this function by yourself, you’re likely to prefer using
+  /// `GraphicsContext::pipeline_builder` instead.
+  pub fn new(ctx: &'a mut C) -> Self {
+    let state = ctx.state().clone();
+
+    Builder {
+      ctx,
+      binding_stack: Rc::new(RefCell::new(BindingStack::new(state))),
+      _borrow: PhantomData,
     }
   }
 }

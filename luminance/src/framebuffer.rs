@@ -34,6 +34,7 @@ use crate::texture::{Dim2, Dimensionable, Layerable};
 
 pub trait Framebuffer<C, L, D>: Sized
 where
+  C: GraphicsContext,
   L: Layerable,
   D: Dimensionable,
 {
@@ -41,9 +42,9 @@ where
 
   type Textures;
 
-  type ColorSlot: ColorSlot<C, L, D, Self::Textures>;
+  type ColorSlot: ColorSlot<C::State, L, D, Self::Textures>;
 
-  type DepthSlot: DepthSlot<C, L, D, Self::Textures>;
+  type DepthSlot: DepthSlot<C::State, L, D, Self::Textures>;
 
   type Err;
 
@@ -69,7 +70,7 @@ where
   fn depth_slot(&self) -> &Self::DepthSlot;
 }
 
-pub trait ColorSlot<C, L, D, I>
+pub trait ColorSlot<S, L, D, I>
 where
   L: Layerable,
   D: Dimensionable,
@@ -79,15 +80,17 @@ where
   const COLOR_FORMATS: &'static [PixelFormat];
 
   /// Reify a list of raw textures.
-  fn reify_textures(
+  fn reify_textures<C>(
     ctx: &mut C,
     size: D::Size,
     mipmaps: usize,
     textures: &mut I,
-  ) -> Self::ColorTextures;
+  ) -> Self::ColorTextures
+  where
+    C: GraphicsContext<State = S>;
 }
 
-impl<C, L, D, I> ColorSlot<C, L, D, I> for ()
+impl<S, L, D, I> ColorSlot<S, L, D, I> for ()
 where
   L: Layerable,
   D: Dimensionable,
@@ -96,53 +99,59 @@ where
 
   const COLOR_FORMATS: &'static [PixelFormat] = &[];
 
-  fn reify_textures(_: &mut C, _: D::Size, _: usize, _: &mut I) -> Self::ColorTextures {
+  fn reify_textures<C>(_: &mut C, _: D::Size, _: usize, _: &mut I) -> Self::ColorTextures
+  where
+    C: GraphicsContext<State = S>,
+  {
     ()
   }
 }
 
-impl<C, L, D, I, P> ColorSlot<C, L, D, I> for P
+impl<S, L, D, I, P> ColorSlot<S, L, D, I> for P
 where
   L: Layerable,
   D: Dimensionable,
-  I: ReifyTexture<C, L, D, P>,
+  I: ReifyTexture<S, L, D, P>,
   Self: ColorPixel + RenderablePixel,
 {
-  type ColorTextures = <I as ReifyTexture<C, L, D, P>>::Texture;
+  type ColorTextures = <I as ReifyTexture<S, L, D, P>>::Texture;
 
   const COLOR_FORMATS: &'static [PixelFormat] = &[Self::PIXEL_FORMAT];
 
-  fn reify_textures(
+  fn reify_textures<C>(
     ctx: &mut C,
     size: D::Size,
     mipmaps: usize,
     state: &mut I,
-  ) -> Self::ColorTextures {
+  ) -> Self::ColorTextures
+  where
+    C: GraphicsContext<State = S>,
+  {
     I::reify_texture(ctx, size, mipmaps, state)
   }
 }
 
 macro_rules! impl_color_slot_tuple {
   ($($pf:ident),*) => {
-    impl<C, L, D, I, $($pf),*> ColorSlot<C, L, D, I> for ($($pf),*)
+    impl<S, L, D, I, $($pf),*> ColorSlot<S, L, D, I> for ($($pf),*)
     where
       L: Layerable,
       D: Dimensionable,
       $(
-        I: ReifyTexture<C, L, D, $pf>,
+        I: ReifyTexture<S, L, D, $pf>,
         $pf: ColorPixel + RenderablePixel
       ),* {
-      type ColorTextures = ($(<I as ReifyTexture<C, L, D, $pf>>::Texture),*);
+      type ColorTextures = ($(<I as ReifyTexture<S, L, D, $pf>>::Texture),*);
 
       const COLOR_FORMATS: &'static [PixelFormat] = &[$($pf::PIXEL_FORMAT),*];
 
-      fn reify_textures(
+      fn reify_textures<C>(
         ctx: &mut C,
         size: D::Size,
         mipmaps: usize,
         state: &mut I,
-      ) -> Self::ColorTextures {
-        ( $( <I as ReifyTexture<C, L, D, $pf>>::reify_texture(ctx, size, mipmaps, state) ),* )
+      ) -> Self::ColorTextures where C: GraphicsContext<State = S> {
+        ( $( <I as ReifyTexture<S, L, D, $pf>>::reify_texture(ctx, size, mipmaps, state) ),* )
       }
     }
   }
@@ -164,7 +173,7 @@ macro_rules! impl_color_slot_tuples {
 
 impl_color_slot_tuples!(PF, PE, PD, PC, PB, PA, P9, P8, P7, P6, P5, P4, P3, P2, P1, P0);
 
-pub trait DepthSlot<C, L, D, I>
+pub trait DepthSlot<S, L, D, I>
 where
   L: Layerable,
   D: Dimensionable,
@@ -173,11 +182,17 @@ where
 
   const DEPTH_FORMAT: Option<PixelFormat>;
 
-  fn reify_texture(ctx: &mut C, size: D::Size, mipmaps: usize, state: &mut I)
-    -> Self::DepthTexture;
+  fn reify_texture<C>(
+    ctx: &mut C,
+    size: D::Size,
+    mipmaps: usize,
+    state: &mut I,
+  ) -> Self::DepthTexture
+  where
+    C: GraphicsContext<State = S>;
 }
 
-impl<C, L, D, I> DepthSlot<C, L, D, I> for ()
+impl<S, L, D, I> DepthSlot<S, L, D, I> for ()
 where
   L: Layerable,
   D: Dimensionable,
@@ -186,38 +201,51 @@ where
 
   const DEPTH_FORMAT: Option<PixelFormat> = None;
 
-  fn reify_texture(_: &mut C, _: D::Size, _: usize, _: &mut I) -> Self::DepthTexture {
+  fn reify_texture<C>(_: &mut C, _: D::Size, _: usize, _: &mut I) -> Self::DepthTexture
+  where
+    C: GraphicsContext<State = S>,
+  {
     ()
   }
 }
 
-impl<C, L, D, I, P> DepthSlot<C, L, D, I> for P
+impl<S, L, D, I, P> DepthSlot<S, L, D, I> for P
 where
   L: Layerable,
   D: Dimensionable,
-  I: ReifyTexture<C, L, D, Self>,
+  I: ReifyTexture<S, L, D, Self>,
   Self: DepthPixel,
 {
-  type DepthTexture = <I as ReifyTexture<C, L, D, Self>>::Texture;
+  type DepthTexture = <I as ReifyTexture<S, L, D, Self>>::Texture;
 
   const DEPTH_FORMAT: Option<PixelFormat> = Some(Self::PIXEL_FORMAT);
 
-  fn reify_texture(
+  fn reify_texture<C>(
     ctx: &mut C,
     size: D::Size,
     mipmaps: usize,
     state: &mut I,
-  ) -> Self::DepthTexture {
+  ) -> Self::DepthTexture
+  where
+    C: GraphicsContext<State = S>,
+  {
     I::reify_texture(ctx, size, mipmaps, state)
   }
 }
 
-pub trait ReifyTexture<C, L, D, P>
+pub trait ReifyTexture<S, L, D, P>
 where
   L: Layerable,
   D: Dimensionable,
 {
   type Texture;
 
-  fn reify_texture(ctx: &mut C, size: D::Size, mipmaps: usize, state: &mut Self) -> Self::Texture;
+  fn reify_texture<C>(
+    ctx: &mut C,
+    size: D::Size,
+    mipmaps: usize,
+    state: &mut Self,
+  ) -> Self::Texture
+  where
+    C: GraphicsContext<State = S>;
 }

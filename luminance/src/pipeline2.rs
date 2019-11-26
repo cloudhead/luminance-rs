@@ -6,14 +6,17 @@ use crate::shader::program2::Program;
 use crate::tess::{Tess, TessSlice};
 use crate::texture::{Dimensionable, Layerable, Texture};
 
-pub trait Builder<'a, C> {
+pub trait Builder<'ctx, 'a, C>
+where
+  C: GraphicsContext,
+{
   type ShadingGate: ShadingGate<'a, C>;
 
   /// Create a new `Builder`.
   ///
   /// Even though you can call this function by yourself, you’re likely to prefer using
   /// `GraphicsContext::pipeline_builder` instead.
-  fn new(ctx: &mut C) -> Self;
+  fn new(ctx: &'ctx mut C) -> Self;
 
   fn pipeline<L, D, CS, DS, Fr, F>(
     &'a mut self,
@@ -21,12 +24,13 @@ pub trait Builder<'a, C> {
     clear_color: [f32; 4],
     f: F,
   ) where
-    Self: PipelineFramebuffer<'a, C, L, D, CS, DS>,
+    Self: PipelineFramebuffer<'ctx, 'a, C, L, D, CS, DS>,
     L: Layerable,
     D: Dimensionable,
-    F: FnOnce(<Self as PipelineFramebuffer<'a, C, L, D, CS, DS>>::Pipeline, Self::ShadingGate),
+    F:
+      FnOnce(<Self as PipelineFramebuffer<'ctx, 'a, C, L, D, CS, DS>>::Pipeline, Self::ShadingGate),
   {
-    <Self as PipelineFramebuffer<'a, C, L, D, CS, DS>>::run_pipeline(
+    <Self as PipelineFramebuffer<'ctx, 'a, C, L, D, CS, DS>>::run_pipeline(
       self,
       framebuffer,
       clear_color,
@@ -35,8 +39,9 @@ pub trait Builder<'a, C> {
   }
 }
 
-pub trait PipelineFramebuffer<'a, C, L, D, CS, DS>: Builder<'a, C>
+pub trait PipelineFramebuffer<'ctx, 'a, C, L, D, CS, DS>: Builder<'ctx, 'a, C>
 where
+  C: GraphicsContext,
   L: Layerable,
   D: Dimensionable,
 {
