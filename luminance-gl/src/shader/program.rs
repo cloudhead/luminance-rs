@@ -411,7 +411,7 @@ where
   }
 
   fn link(&'program self) -> Result<(), Self::Err> {
-    Program::link(self)
+    self.deref().link()
   }
 
   fn interface(&'program self) -> Self::ProgramInterface {

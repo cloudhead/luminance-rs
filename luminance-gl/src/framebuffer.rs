@@ -32,7 +32,7 @@ use gl;
 use gl::types::*;
 use luminance::context::GraphicsContext;
 use luminance::framebuffer::{ColorSlot, DepthSlot, ReifyTexture};
-use luminance::pixel::{ColorPixel, DepthPixel, Pixel, PixelFormat, RenderablePixel};
+use luminance::pixel::Pixel;
 use luminance::texture::{Dim2, Dimensionable, Flat, Layerable};
 use std::cell::RefCell;
 use std::fmt;

@@ -1,18 +1,28 @@
 use gl;
 use gl::types::*;
+use luminance::blending::BlendingState;
 use luminance::context::GraphicsContext;
-use luminance::pipeline2::{Bind, Pipeline as PipelineBackend, TessGate as TessGateBackend};
+use luminance::depth_test::DepthTest;
+use luminance::face_culling::FaceCullingState;
+use luminance::pipeline2::{
+  Bind, Pipeline as PipelineBackend, RenderGate as RenderGateBackend,
+  ShadingGate as ShadingGateBackend, ShadingGateProgram, TessGate as TessGateBackend,
+};
 use luminance::pixel::{Pixel, SamplerType, Type as PxType};
-use luminance::shader::program2::{Type as UniformType, Uniformable};
+use luminance::render_state::RenderState;
+use luminance::shader::program2::{
+  Program as ProgramBackend, Type as UniformType, UniformInterface, Uniformable,
+};
 use luminance::tess::TessSlice;
 use luminance::texture::{Dim, Dimensionable, Layerable};
+use luminance::vertex::Semantics;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::buffer::{Buffer, RawBuffer};
 use crate::framebuffer::Framebuffer;
-use crate::shader::program::Uniform;
+use crate::shader::program::{Program, ProgramInterface, Uniform};
 use crate::state::GraphicsState;
 use crate::tess::Tess;
 use crate::texture::Texture;
@@ -69,6 +79,50 @@ where
       _borrow: PhantomData,
     }
   }
+
+  //pub fn pipeline<'b, L, D, CS, DS, F>(
+  //  &'b mut self,
+  //  framebuffer: &Framebuffer<L, D, CS, DS>,
+  //  clear_color: [f32; 4],
+  //  f: F,
+  //) where
+  //  L: Layerable,
+  //  D: Dimensionable,
+  //  CS: ColorSlot<GraphicsState, L, D>,
+  //  DS: DepthSlot<GraphicsState, L, D>,
+  //  F: FnOnce(Pipeline<'b>, ShadingGate<'b, C>),
+  //{
+  //  unsafe {
+  //    self
+  //      .ctx
+  //      .state()
+  //      .borrow_mut()
+  //      .bind_draw_framebuffer(framebuffer.handle());
+
+  //    gl::Viewport(
+  //      0,
+  //      0,
+  //      framebuffer.width() as GLint,
+  //      framebuffer.height() as GLint,
+  //    );
+  //    gl::ClearColor(
+  //      clear_color[0],
+  //      clear_color[1],
+  //      clear_color[2],
+  //      clear_color[3],
+  //    );
+  //    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+  //  }
+
+  //  let binding_stack = &self.binding_stack;
+  //  let p = Pipeline { binding_stack };
+  //  let shd_gt = ShadingGate {
+  //    ctx: self.ctx,
+  //    binding_stack,
+  //  };
+
+  //  f(p, shd_gt);
+  //}
 }
 
 /// A dynamic pipeline.
@@ -260,6 +314,138 @@ unsafe impl<'a, 'b, T> Uniformable<&'b BoundBuffer<'a, T>> for Uniform<&'b Bound
         buffer.binding as GLuint,
       )
     }
+  }
+}
+
+/// A shading gate provides you with a way to run shaders on rendering commands.
+pub struct ShadingGate<'a, C>
+where
+  C: ?Sized,
+{
+  ctx: &'a mut C,
+  binding_stack: &'a Rc<RefCell<BindingStack>>,
+}
+
+impl<'a, C> ShadingGate<'a, C>
+where
+  C: ?Sized + GraphicsContext<State = GraphicsState>,
+{
+  /// Run a shader on a set of rendering commands.
+  pub fn shade<'b, In, Out, Uni, F>(&'b mut self, program: &Program<In, Out, Uni>, f: F)
+  where
+    In: Semantics,
+    Uni: UniformInterface,
+    F: FnOnce(ProgramInterface<Uni>, RenderGate<'b, C>),
+  {
+    unsafe {
+      let bstack = self.binding_stack.borrow_mut();
+      bstack.state.borrow_mut().use_program(program.handle());
+    };
+
+    let render_gate = RenderGate {
+      ctx: self.ctx,
+      binding_stack: self.binding_stack,
+    };
+
+    let program_interface = program.interface();
+    f(program_interface, render_gate);
+  }
+}
+
+impl<'a, C> ShadingGateBackend<'a, C> for ShadingGate<'a, C>
+where
+  C: GraphicsContext<State = GraphicsState>,
+{
+  type RenderGate = RenderGate<'a, C>;
+}
+
+impl<'a, C, S, Out, Uni> ShadingGateProgram<'a, C, S, Out, Uni> for ShadingGate<'a, C>
+where
+  C: GraphicsContext<State = GraphicsState>,
+  S: Semantics,
+  Uni: 'a + UniformInterface,
+{
+  type Program = Program<S, Out, Uni>;
+
+  fn shade_with_program<F>(&'a mut self, program: &Self::Program, f: F)
+  where
+    F: FnOnce(
+      <Self::Program as ProgramBackend<'a, S, Out, Uni>>::ProgramInterface,
+      Self::RenderGate,
+    ),
+  {
+    ShadingGate::shade(self, program, f)
+  }
+}
+
+pub struct RenderGate<'a, C>
+where
+  C: ?Sized,
+{
+  ctx: &'a mut C,
+  binding_stack: &'a Rc<RefCell<BindingStack>>,
+}
+
+impl<'a, C> RenderGate<'a, C>
+where
+  C: GraphicsContext<State = GraphicsState>,
+{
+  /// Alter the render state and draw tessellations.
+  pub fn render<'b, F>(&'b mut self, rdr_st: RenderState, f: F)
+  where
+    F: FnOnce(TessGate<'b, C>),
+  {
+    unsafe {
+      let bstack = self.binding_stack.borrow_mut();
+      let mut gfx_state = bstack.state.borrow_mut();
+
+      match rdr_st.blending() {
+        Some((equation, src_factor, dst_factor)) => {
+          gfx_state.set_blending_state(BlendingState::On);
+          gfx_state.set_blending_equation(equation);
+          gfx_state.set_blending_func(src_factor, dst_factor);
+        }
+        None => {
+          gfx_state.set_blending_state(BlendingState::Off);
+        }
+      }
+
+      if let Some(depth_comparison) = rdr_st.depth_test() {
+        gfx_state.set_depth_test(DepthTest::On);
+        gfx_state.set_depth_test_comparison(depth_comparison);
+      } else {
+        gfx_state.set_depth_test(DepthTest::Off);
+      }
+
+      match rdr_st.face_culling() {
+        Some(face_culling) => {
+          gfx_state.set_face_culling_state(FaceCullingState::On);
+          gfx_state.set_face_culling_order(face_culling.order());
+          gfx_state.set_face_culling_mode(face_culling.mode());
+        }
+        None => {
+          gfx_state.set_face_culling_state(FaceCullingState::Off);
+        }
+      }
+    }
+
+    let tess_gate = TessGate { ctx: self.ctx };
+
+    f(tess_gate);
+  }
+}
+
+impl<'a, C> RenderGateBackend<'a, C> for RenderGate<'a, C>
+where
+  C: GraphicsContext<State = GraphicsState>,
+{
+  type TessGate = TessGate<'a, C>;
+
+  fn render<F>(&'a mut self, rdr_st: RenderState, f: F)
+  where
+    F: FnOnce(Self::TessGate),
+  {
+    RenderGate::render(self, rdr_st, f)
   }
 }
 

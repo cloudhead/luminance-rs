@@ -15,6 +15,14 @@ impl FaceCulling {
   pub fn new(order: FaceCullingOrder, mode: FaceCullingMode) -> Self {
     FaceCulling { order, mode }
   }
+
+  pub fn order(&self) -> FaceCullingOrder {
+    self.order
+  }
+
+  pub fn mode(&self) -> FaceCullingMode {
+    self.mode
+  }
 }
 
 impl Default for FaceCulling {
