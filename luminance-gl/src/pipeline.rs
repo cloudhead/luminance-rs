@@ -331,11 +331,11 @@ where
   C: ?Sized + GraphicsContext<State = GraphicsState>,
 {
   /// Run a shader on a set of rendering commands.
-  pub fn shade<'b, In, Out, Uni, F>(&'b mut self, program: &Program<In, Out, Uni>, f: F)
+  pub fn shade<In, Out, Uni, F>(&'a mut self, program: &'a Program<In, Out, Uni>, f: F)
   where
     In: Semantics,
-    Uni: UniformInterface,
-    F: FnOnce(ProgramInterface<Uni>, RenderGate<'b, C>),
+    Uni: 'a + UniformInterface,
+    F: FnOnce(ProgramInterface<'a, Uni>, RenderGate<'a, C>),
   {
     unsafe {
       let bstack = self.binding_stack.borrow_mut();
@@ -367,7 +367,7 @@ where
 {
   type Program = Program<S, Out, Uni>;
 
-  fn shade_with_program<F>(&'a mut self, program: &Self::Program, f: F)
+  fn shade_with_program<F>(&'a mut self, program: &'a Self::Program, f: F)
   where
     F: FnOnce(
       <Self::Program as ProgramBackend<'a, S, Out, Uni>>::ProgramInterface,

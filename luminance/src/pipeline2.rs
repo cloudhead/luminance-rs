@@ -74,7 +74,7 @@ pub trait Bind<'a, T> {
 pub trait ShadingGate<'a, C> {
   type RenderGate: RenderGate<'a, C>;
 
-  fn shade<S, Out, Uni, F>(&'a mut self, program: &Self::Program, f: F)
+  fn shade<S, Out, Uni, F>(&'a mut self, program: &'a Self::Program, f: F)
   where
     Self: ShadingGateProgram<'a, C, S, Out, Uni>,
     F: FnOnce(<Self::Program as Program<'a, S, Out, Uni>>::ProgramInterface, Self::RenderGate),
@@ -86,7 +86,7 @@ pub trait ShadingGate<'a, C> {
 pub trait ShadingGateProgram<'a, C, S, Out, Uni>: ShadingGate<'a, C> {
   type Program: Program<'a, S, Out, Uni>;
 
-  fn shade_with_program<F>(&'a mut self, program: &Self::Program, f: F)
+  fn shade_with_program<F>(&'a mut self, program: &'a Self::Program, f: F)
   where
     F: FnOnce(<Self::Program as Program<'a, S, Out, Uni>>::ProgramInterface, Self::RenderGate);
 }
