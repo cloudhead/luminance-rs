@@ -61,13 +61,17 @@ where
   fn new(ctx: &mut C, size: D::Size, mipmaps: usize) -> Result<Self, Self::Err>;
 
   /// Dimension of the framebuffer.
-  fn dimension(&self) -> D::Size;
+  fn dim(&self) -> D::Size;
 
   /// Access the underlying color slot.
-  fn color_slot(&self) -> &Self::ColorSlot;
+  fn color_slot(
+    &self,
+  ) -> &<Self::ColorSlot as ColorSlot<C::State, L, D, Self::Textures>>::ColorTextures;
 
   /// Access the underlying depth slot.
-  fn depth_slot(&self) -> &Self::DepthSlot;
+  fn depth_slot(
+    &self,
+  ) -> &<Self::DepthSlot as DepthSlot<C::State, L, D, Self::Textures>>::DepthTexture;
 }
 
 pub trait ColorSlot<S, L, D, I>

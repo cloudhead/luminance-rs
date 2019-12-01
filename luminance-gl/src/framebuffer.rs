@@ -31,7 +31,9 @@
 use gl;
 use gl::types::*;
 use luminance::context::GraphicsContext;
-use luminance::framebuffer::{ColorSlot, DepthSlot, ReifyTexture};
+use luminance::framebuffer::{
+  ColorSlot, DepthSlot, Framebuffer as FramebufferBackend, ReifyTexture,
+};
 use luminance::pixel::Pixel;
 use luminance::texture::{Dim2, Dimensionable, Flat, Layerable};
 use std::cell::RefCell;
@@ -136,7 +138,7 @@ where
 {
   handle: GLuint,
   renderbuffer: Option<GLuint>,
-  dimension: D::Size,
+  dim: D::Size,
   color_slot: CS::ColorTextures,
   depth_slot: DS::DepthTexture,
   state: Rc<RefCell<GraphicsState>>,
@@ -146,14 +148,14 @@ where
 
 impl Framebuffer<Flat, Dim2, (), ()> {
   /// Get the back buffer with the given dimension.
-  pub fn back_buffer<C>(ctx: &mut C, dimension: <Dim2 as Dimensionable>::Size) -> Self
+  pub fn back_buffer<C>(ctx: &mut C, dim: <Dim2 as Dimensionable>::Size) -> Self
   where
     C: GraphicsContext<State = GraphicsState>,
   {
     Framebuffer {
       handle: 0,
       renderbuffer: None,
-      dimension,
+      dim,
       color_slot: (),
       depth_slot: (),
       state: ctx.state().clone(),
@@ -190,7 +192,7 @@ where
   /// levels, you can pass the number via the `mipmaps` parameter.
   pub fn new<C>(
     ctx: &mut C,
-    dimension: D::Size,
+    dim: D::Size,
     mipmaps: usize,
   ) -> Result<Framebuffer<L, D, CS, DS>, FramebufferError>
   where
@@ -219,7 +221,7 @@ where
       } else {
         for (i, (format, texture)) in color_formats.iter().zip(&textures).enumerate() {
           ctx.state().borrow_mut().bind_texture(target, *texture);
-          create_texture::<L, D>(target, dimension, mipmaps, *format, Default::default())
+          create_texture::<L, D>(target, dim, mipmaps, *format, Default::default())
             .map_err(FramebufferError::TextureError)?;
           gl::FramebufferTexture(
             gl::FRAMEBUFFER,
@@ -242,7 +244,7 @@ where
         let texture = *textures.last().unwrap();
 
         ctx.state().borrow_mut().bind_texture(target, texture);
-        create_texture::<L, D>(target, dimension, mipmaps, format, Default::default())
+        create_texture::<L, D>(target, dim, mipmaps, format, Default::default())
           .map_err(FramebufferError::TextureError)?;
         gl::FramebufferTexture(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, texture, 0);
       } else {
@@ -253,8 +255,8 @@ where
         gl::RenderbufferStorage(
           gl::RENDERBUFFER,
           gl::DEPTH_COMPONENT32F,
-          D::width(dimension) as GLsizei,
-          D::height(dimension) as GLsizei,
+          D::width(dim) as GLsizei,
+          D::height(dim) as GLsizei,
         );
         gl::BindRenderbuffer(gl::RENDERBUFFER, 0); // FIXME: see whether really needed
 
@@ -274,9 +276,9 @@ where
       let framebuffer = Framebuffer {
         handle,
         renderbuffer: depth_renderbuffer,
-        dimension,
-        color_slot: CS::reify_textures(ctx, dimension, mipmaps, &mut reify_state),
-        depth_slot: DS::reify_texture(ctx, dimension, mipmaps, &mut reify_state),
+        dim,
+        color_slot: CS::reify_textures(ctx, dim, mipmaps, &mut reify_state),
+        depth_slot: DS::reify_texture(ctx, dim, mipmaps, &mut reify_state),
         state: ctx.state().clone(),
         _l: PhantomData,
         _d: PhantomData,
@@ -324,7 +326,7 @@ where
   /// Dimension of the framebuffer.
   #[inline]
   pub fn dim(&self) -> D::Size {
-    self.dimension
+    self.dim
   }
 
   /// Access the underlying color slot.
@@ -337,6 +339,54 @@ where
   #[inline]
   pub fn depth_slot(&self) -> &DS::DepthTexture {
     &self.depth_slot
+  }
+}
+
+impl<C, L, D, CS, DS> FramebufferBackend<C, L, D> for Framebuffer<L, D, CS, DS>
+where
+  C: GraphicsContext<State = GraphicsState>,
+  L: Layerable,
+  D: Dimensionable,
+  D::Size: Copy,
+  CS: ColorSlot<GraphicsState, L, D, ReifyState>,
+  DS: DepthSlot<GraphicsState, L, D, ReifyState>,
+{
+  type BackBuffer = Framebuffer<Flat, Dim2, (), ()>;
+
+  type Textures = ReifyState;
+
+  type ColorSlot = CS;
+
+  type DepthSlot = DS;
+
+  type Err = FramebufferError;
+
+  fn back_buffer(
+    ctx: &mut C,
+    size: <Dim2 as Dimensionable>::Size,
+  ) -> Result<Self::BackBuffer, Self::Err> {
+    Ok(Framebuffer::back_buffer(ctx, size))
+  }
+
+  fn new(ctx: &mut C, size: D::Size, mipmaps: usize) -> Result<Self, Self::Err> {
+    Framebuffer::new(ctx, size, mipmaps)
+  }
+
+  fn dim(&self) -> D::Size {
+    Framebuffer::dim(self)
+  }
+
+  fn color_slot(
+    &self,
+  ) -> &<Self::ColorSlot as ColorSlot<C::State, L, D, Self::Textures>>::ColorTextures {
+    Framebuffer::color_slot(self)
+  }
+
+  /// Access the underlying depth slot.
+  fn depth_slot(
+    &self,
+  ) -> &<Self::DepthSlot as DepthSlot<C::State, L, D, Self::Textures>>::DepthTexture {
+    Framebuffer::depth_slot(self)
   }
 }
 

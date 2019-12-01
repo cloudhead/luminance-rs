@@ -4,9 +4,11 @@ use luminance::blending::BlendingState;
 use luminance::context::GraphicsContext;
 use luminance::depth_test::DepthTest;
 use luminance::face_culling::FaceCullingState;
+use luminance::framebuffer::{ColorSlot, DepthSlot};
 use luminance::pipeline2::{
-  Bind, Pipeline as PipelineBackend, RenderGate as RenderGateBackend,
-  ShadingGate as ShadingGateBackend, ShadingGateProgram, TessGate as TessGateBackend,
+  Bind, Builder as BuilderBackend, Pipeline as PipelineBackend, PipelineFramebuffer,
+  RenderGate as RenderGateBackend, ShadingGate as ShadingGateBackend, ShadingGateProgram,
+  TessGate as TessGateBackend,
 };
 use luminance::pixel::{Pixel, SamplerType, Type as PxType};
 use luminance::render_state::RenderState;
@@ -20,8 +22,8 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::buffer::{Buffer, RawBuffer};
-use crate::framebuffer::Framebuffer;
+use crate::buffer::Buffer;
+use crate::framebuffer::{Framebuffer, ReifyState};
 use crate::shader::program::{Program, ProgramInterface, Uniform};
 use crate::state::GraphicsState;
 use crate::tess::Tess;
@@ -64,7 +66,7 @@ where
 
 impl<'a, C> Builder<'a, C>
 where
-  C: ?Sized + GraphicsContext<State = GraphicsState>,
+  C: GraphicsContext<State = GraphicsState>,
 {
   /// Create a new `Builder`.
   ///
@@ -80,49 +82,76 @@ where
     }
   }
 
-  //pub fn pipeline<'b, L, D, CS, DS, F>(
-  //  &'b mut self,
-  //  framebuffer: &Framebuffer<L, D, CS, DS>,
-  //  clear_color: [f32; 4],
-  //  f: F,
-  //) where
-  //  L: Layerable,
-  //  D: Dimensionable,
-  //  CS: ColorSlot<GraphicsState, L, D>,
-  //  DS: DepthSlot<GraphicsState, L, D>,
-  //  F: FnOnce(Pipeline<'b>, ShadingGate<'b, C>),
-  //{
-  //  unsafe {
-  //    self
-  //      .ctx
-  //      .state()
-  //      .borrow_mut()
-  //      .bind_draw_framebuffer(framebuffer.handle());
+  pub fn pipeline<'b, L, D, CS, DS, F>(
+    &'b mut self,
+    framebuffer: &Framebuffer<L, D, CS, DS>,
+    clear_color: [f32; 4],
+    f: F,
+  ) where
+    L: Layerable,
+    D: Dimensionable,
+    CS: ColorSlot<GraphicsState, L, D, ReifyState>,
+    DS: DepthSlot<GraphicsState, L, D, ReifyState>,
+    F: FnOnce(Pipeline<'b>, ShadingGate<'b, C>),
+  {
+    unsafe {
+      self
+        .ctx
+        .state()
+        .borrow_mut()
+        .bind_draw_framebuffer(framebuffer.handle());
 
-  //    gl::Viewport(
-  //      0,
-  //      0,
-  //      framebuffer.width() as GLint,
-  //      framebuffer.height() as GLint,
-  //    );
-  //    gl::ClearColor(
-  //      clear_color[0],
-  //      clear_color[1],
-  //      clear_color[2],
-  //      clear_color[3],
-  //    );
-  //    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-  //  }
+      let dim = framebuffer.dim();
+      gl::Viewport(0, 0, D::width(dim) as GLint, D::height(dim) as GLint);
+      gl::ClearColor(
+        clear_color[0],
+        clear_color[1],
+        clear_color[2],
+        clear_color[3],
+      );
+      gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    }
 
-  //  let binding_stack = &self.binding_stack;
-  //  let p = Pipeline { binding_stack };
-  //  let shd_gt = ShadingGate {
-  //    ctx: self.ctx,
-  //    binding_stack,
-  //  };
+    let binding_stack = &self.binding_stack;
+    let p = Pipeline { binding_stack };
+    let shd_gt = ShadingGate {
+      ctx: self.ctx,
+      binding_stack,
+    };
 
-  //  f(p, shd_gt);
-  //}
+    f(p, shd_gt);
+  }
+}
+
+impl<'ctx, 'a, C> BuilderBackend<'ctx, 'a, C> for Builder<'ctx, C>
+where
+  C: 'a + GraphicsContext<State = GraphicsState>,
+{
+  type ShadingGate = ShadingGate<'a, C>;
+
+  fn new(ctx: &'ctx mut C) -> Self {
+    Builder::new(ctx)
+  }
+}
+
+impl<'ctx, 'a, C, L, D, CS, DS> PipelineFramebuffer<'ctx, 'a, C, L, D, CS, DS> for Builder<'ctx, C>
+where
+  C: 'a + GraphicsContext<State = GraphicsState>,
+  L: Layerable,
+  D: Dimensionable,
+  CS: ColorSlot<GraphicsState, L, D, ReifyState>,
+  DS: DepthSlot<GraphicsState, L, D, ReifyState>,
+{
+  type Pipeline = Pipeline<'a>;
+
+  type Framebuffer = Framebuffer<L, D, CS, DS>;
+
+  fn run_pipeline<F>(&'a mut self, framebuffer: &Self::Framebuffer, clear_color: [f32; 4], f: F)
+  where
+    F: FnOnce(Self::Pipeline, Self::ShadingGate),
+  {
+    self.pipeline(framebuffer, clear_color, f)
+  }
 }
 
 /// A dynamic pipeline.
