@@ -5,14 +5,14 @@ use luminance::context::GraphicsContext;
 use luminance::depth_test::DepthTest;
 use luminance::face_culling::FaceCullingState;
 use luminance::framebuffer::{ColorSlot, DepthSlot};
-use luminance::pipeline2::{
+use luminance::pipeline::{
   Bind, Builder as BuilderBackend, Pipeline as PipelineBackend, PipelineFramebuffer,
   RenderGate as RenderGateBackend, ShadingGate as ShadingGateBackend, ShadingGateProgram,
   TessGate as TessGateBackend,
 };
 use luminance::pixel::{Pixel, SamplerType, Type as PxType};
 use luminance::render_state::RenderState;
-use luminance::shader::program2::{
+use luminance::shader::program::{
   Program as ProgramBackend, Type as UniformType, UniformInterface, Uniformable,
 };
 use luminance::tess::TessSlice;

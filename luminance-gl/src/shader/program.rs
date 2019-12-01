@@ -1,6 +1,6 @@
 use gl;
 use gl::types::*;
-use luminance::shader::program2::{
+use luminance::shader::program::{
   AdaptationFailure, BuiltProgram, Program as ProgramBackend,
   ProgramInterface as ProgramInterfaceBackend, TessellationStages, Type as UniformType,
   UniformBuild, UniformBuilder as UniformBuilderBackend, UniformInterface, Uniformable,
