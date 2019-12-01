@@ -78,10 +78,10 @@ pub(crate) fn generate_uniform_interface_impl(
 
       let output = quote! {
         impl luminance::shader::program::UniformInterface for #ident {
-          fn uniform_interface(
-            builder: &mut luminance::shader::program::UniformBuilder,
-            _: ()
-          ) -> Result<Self, luminance::shader::program::ProgramError> {
+          fn uniform_interface<'a, B>(builder: &mut B, env: E) -> Result<Self, B::Err>
+          where
+            B: luminance::shader::program::UniformBuilder,
+          {
             #(#field_decls)*
 
             let iface = #ident { #(#field_names,)* };

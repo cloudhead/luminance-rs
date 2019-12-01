@@ -168,17 +168,18 @@ pub trait UniformBuilder {
   }
 }
 
-pub trait UniformInterface<E = ()>: Sized {
-  fn uniform_interface<'a, B>(builder: &mut B, env: E) -> Result<Self, B::Err>
-  where
-    B: UniformBuilder;
+pub trait UniformInterface<B, E = ()>: Sized
+where
+  B: UniformBuilder,
+{
+  fn uniform_interface<'a>(builder: &mut B, env: E) -> Result<Self, B::Err>;
 }
 
-impl<E> UniformInterface<E> for () {
-  fn uniform_interface<'a, B>(_: &mut B, _: E) -> Result<Self, B::Err>
-  where
-    B: UniformBuilder,
-  {
+impl<B, E> UniformInterface<B, E> for ()
+where
+  B: UniformBuilder,
+{
+  fn uniform_interface<'a>(_: &mut B, _: E) -> Result<Self, B::Err> {
     Ok(())
   }
 }
@@ -236,9 +237,9 @@ impl<P, E> AdaptationFailure<P, E> {
 pub trait Program<'program, S, Out, Uni>: Sized {
   type Stage;
 
-  type Err;
-
   type ProgramInterface: ProgramInterface<'program, Uni>;
+
+  type Err;
 
   fn from_stages_env<T, G, E>(
     vertex: &Self::Stage,
@@ -250,7 +251,10 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
     G: for<'a> Into<Option<&'a Self::Stage>>,
-    Uni: UniformInterface<E>;
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >;
 
   fn from_stages<T, G>(
     vertex: &Self::Stage,
@@ -261,7 +265,9 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
     G: for<'a> Into<Option<&'a Self::Stage>>,
-    Uni: UniformInterface,
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+    >,
   {
     Self::from_stages_env(vertex, tess, geometry, fragment, ())
   }
@@ -276,7 +282,10 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, str>>>,
     G: for<'a> Into<Option<&'a str>>,
-    Uni: UniformInterface<E>;
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >;
 
   fn from_strings<T, G>(
     vertex: &str,
@@ -287,12 +296,14 @@ pub trait Program<'program, S, Out, Uni>: Sized {
   where
     T: for<'a> Into<Option<TessellationStages<'a, str>>>,
     G: for<'a> Into<Option<&'a str>>,
-    Uni: UniformInterface,
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+    >,
   {
     Self::from_strings_env(vertex, tess, geometry, fragment, ())
   }
 
-  fn link(&'program self) -> Result<(), Self::Err>;
+  fn link(&self) -> Result<(), Self::Err>;
 
   fn interface(&'program self) -> Self::ProgramInterface;
 
@@ -307,14 +318,17 @@ pub trait Program<'program, S, Out, Uni>: Sized {
     env: E,
   ) -> Result<BuiltProgram<Self, Self::Err>, AdaptationFailure<Self, Self::Err>>
   where
-    Uni: UniformInterface<E>;
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >;
 }
 
-pub trait ProgramInterface<'a, Uni>
+pub trait ProgramInterface<'program, Uni>
 where
   Self: Deref<Target = Uni>,
 {
   type UniformBuilder: UniformBuilder;
 
-  fn query(&'a self) -> Self::UniformBuilder;
+  fn query(&'program self) -> Self::UniformBuilder;
 }

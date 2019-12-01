@@ -168,9 +168,9 @@ where
     env: E,
   ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
-    Uni: UniformInterface<E>,
     T: Into<Option<TessellationStages<'a, Stage>>>,
     G: Into<Option<&'a Stage>>,
+    Uni: for<'b> UniformInterface<UniformBuilder<'b>, E>,
   {
     let raw = RawProgram::new(vertex, tess, geometry, fragment)?;
 
@@ -203,9 +203,9 @@ where
     fragment: &'a Stage,
   ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
-    Uni: UniformInterface,
     T: Into<Option<TessellationStages<'a, Stage>>>,
     G: Into<Option<&'a Stage>>,
+    Uni: for<'b> UniformInterface<UniformBuilder<'b>>,
   {
     Self::from_stages_env(vertex, tess, geometry, fragment, ())
   }
@@ -219,9 +219,9 @@ where
     env: E,
   ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
-    Uni: UniformInterface<E>,
     T: Into<Option<TessellationStages<'a, str>>>,
     G: Into<Option<&'a str>>,
+    Uni: for<'b> UniformInterface<UniformBuilder<'b>, E>,
   {
     let vs = Stage::new(StageType::VertexShader, vertex).map_err(ProgramError::StageError)?;
 
@@ -271,9 +271,9 @@ where
     fragment: &'a str,
   ) -> Result<BuiltProgram<Self, ProgramError>, ProgramError>
   where
-    Uni: UniformInterface,
     T: Into<Option<TessellationStages<'a, str>>>,
     G: Into<Option<&'a str>>,
+    Uni: for<'b> UniformInterface<UniformBuilder<'b>>,
   {
     Self::from_strings_env(vertex, tess, geometry, fragment, ())
   }
@@ -296,7 +296,7 @@ where
     self,
   ) -> Result<BuiltProgram<Program<S, Out, Q>, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
-    Q: UniformInterface,
+    Q: for<'a> UniformInterface<UniformBuilder<'a>>,
   {
     self.adapt_env(())
   }
@@ -307,12 +307,12 @@ where
   /// uniform interface and if the new uniform interface is correctly generated, return the same
   /// shader program updated with the new uniform interface. If the generation of the new uniform
   /// interface fails, this function will return the program with the former uniform interface.
-  pub fn adapt_env<Q, E>(
+  pub fn adapt_env<'program, Q, E>(
     self,
     env: E,
   ) -> Result<BuiltProgram<Program<S, Out, Q>, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
-    Q: UniformInterface<E>,
+    Q: UniformInterface<UniformBuilder<'program>, E>,
   {
     // first, try to create the new uniform interface
     let new_uni_iface = create_uniform_interface(&self.raw, env);
@@ -350,12 +350,12 @@ where
   ///
   /// This function might be needed for when you want to update the uniform interface but still
   /// enforce that the type must remain the same.
-  pub fn readapt_env<E>(
+  pub fn readapt_env<'program, E>(
     self,
     env: E,
   ) -> Result<BuiltProgram<Self, ProgramError>, AdaptationFailure<Self, ProgramError>>
   where
-    Uni: UniformInterface<E>,
+    Uni: UniformInterface<UniformBuilder<'program>, E>,
   {
     self.adapt_env(env)
   }
@@ -390,7 +390,10 @@ where
   where
     T: for<'a> Into<Option<TessellationStages<'a, Self::Stage>>>,
     G: for<'a> Into<Option<&'a Self::Stage>>,
-    Uni: UniformInterface<E>,
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >,
   {
     Program::from_stages_env(vertex, tess, geometry, fragment, env)
   }
@@ -403,14 +406,17 @@ where
     env: E,
   ) -> Result<BuiltProgram<Self, Self::Err>, Self::Err>
   where
-    Uni: UniformInterface<E>,
     T: for<'a> Into<Option<TessellationStages<'a, str>>>,
     G: for<'a> Into<Option<&'a str>>,
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >,
   {
     Program::from_strings_env(vertex, tess, geometry, fragment, env)
   }
 
-  fn link(&'program self) -> Result<(), Self::Err> {
+  fn link(&self) -> Result<(), Self::Err> {
     self.deref().link()
   }
 
@@ -423,7 +429,10 @@ where
     env: E,
   ) -> Result<BuiltProgram<Self, Self::Err>, AdaptationFailure<Self, Self::Err>>
   where
-    Uni: UniformInterface<E>,
+    Uni: for<'a> UniformInterface<
+      <Self::ProgramInterface as ProgramInterface<'a, Uni>>::UniformBuilder,
+      E,
+    >,
   {
     Program::readapt_env(self, env)
   }
@@ -736,12 +745,12 @@ fn check_types_match(name: &str, ty: UniformType, glty: GLuint) -> Result<(), Un
 }
 
 // Generate a uniform interface and collect warnings.
-fn create_uniform_interface<Uni, E>(
-  raw: &RawProgram,
+fn create_uniform_interface<'a, Uni, E>(
+  raw: &'a RawProgram,
   env: E,
 ) -> Result<(Uni, Vec<UniformWarning>), ProgramError>
 where
-  Uni: UniformInterface<E>,
+  Uni: UniformInterface<UniformBuilder<'a>, E>,
 {
   let mut builder = UniformBuilder::new(raw);
   let iface = Uni::uniform_interface(&mut builder, env).map_err(ProgramError::UniformWarning)?;

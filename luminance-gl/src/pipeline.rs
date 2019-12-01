@@ -24,7 +24,7 @@ use std::rc::Rc;
 
 use crate::buffer::Buffer;
 use crate::framebuffer::{Framebuffer, ReifyState};
-use crate::shader::program::{Program, ProgramInterface, Uniform};
+use crate::shader::program::{Program, ProgramInterface, Uniform, UniformBuilder};
 use crate::state::GraphicsState;
 use crate::tess::Tess;
 use crate::texture::Texture;
@@ -363,7 +363,7 @@ where
   pub fn shade<In, Out, Uni, F>(&'a mut self, program: &'a Program<In, Out, Uni>, f: F)
   where
     In: Semantics,
-    Uni: 'a + UniformInterface,
+    Uni: 'a + UniformInterface<UniformBuilder<'a>>,
     F: FnOnce(ProgramInterface<'a, Uni>, RenderGate<'a, C>),
   {
     unsafe {
@@ -392,7 +392,7 @@ impl<'a, C, S, Out, Uni> ShadingGateProgram<'a, C, S, Out, Uni> for ShadingGate<
 where
   C: GraphicsContext<State = GraphicsState>,
   S: Semantics,
-  Uni: 'a + UniformInterface,
+  Uni: 'a + UniformInterface<UniformBuilder<'a>>,
 {
   type Program = Program<S, Out, Uni>;
 
