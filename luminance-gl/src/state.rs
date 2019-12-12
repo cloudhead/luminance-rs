@@ -1,7 +1,10 @@
 use gl;
 use gl::types::*;
+use std::cell::RefCell;
 use std::fmt;
 use std::marker::PhantomData;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use luminance::blending::{BlendingState, Equation, Factor};
 use luminance::depth_test::{DepthComparison, DepthTest};
@@ -16,12 +19,30 @@ use crate::depth_test::depth_comparison_to_glenum;
 #[cfg(feature = "std")]
 thread_local!(static TLS_ACQUIRE_GFX_STATE: RefCell<Option<()>> = RefCell::new(Some(())));
 
+#[derive(Debug)]
+pub struct GLState(Rc<RefCell<GraphicsState>>);
+
+impl GLState {
+  pub(crate) fn clone_ownership(&self) -> Self {
+    GLState(self.0.clone())
+  }
+}
+
+impl Deref for GLState {
+  type Target = Rc<RefCell<GraphicsState>>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
 /// The graphics state.
 ///
 /// This type represents the current state of a given graphics context. It acts
 /// as a forward-gate to all the exposed features from the low-level API but
 /// adds a small cache layer over it to prevent from issuing the same API call (with
 /// the same parameters).
+#[derive(Debug)]
 pub struct GraphicsState {
   _a: PhantomData<*const ()>, // !Send and !Sync
 

@@ -1,10 +1,8 @@
 use gl;
 use gl::types::*;
-use luminance::buffer::Buffer as BufferBackend;
-use luminance::context::GraphicsContext;
+use luminance::buffer::{Buffer as BufferBackend, BufferSlice as BufferSliceBackend};
 use luminance::linear::{M22, M33, M44};
 
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt;
 use std::marker::PhantomData;
@@ -12,10 +10,9 @@ use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_void;
 use std::ptr;
-use std::rc::Rc;
 use std::slice;
 
-use crate::state::{Bind, GraphicsState};
+use crate::state::{Bind, GLState};
 
 /// Buffer errors.
 #[derive(Debug, Eq, PartialEq)]
@@ -74,20 +71,14 @@ impl<T> Buffer<T> {
   ///
   /// That function leaves the buffer _uninitialized_, which is `unsafe`. If you prefer not to use
   /// any `unsafe` function, feel free to use [`Buffer::from_slice`] or [`Buffer::repeat`] instead.
-  pub unsafe fn new<C>(ctx: &mut C, len: usize) -> Buffer<T>
-  where
-    C: GraphicsContext<State = GraphicsState>,
-  {
+  pub unsafe fn new(state: &mut GLState, len: usize) -> Buffer<T> {
     let mut buffer: GLuint = 0;
     let bytes = mem::size_of::<T>() * len;
 
     // generate a buffer and force binding the handle; this prevent side-effects from previous bound
     // resources to prevent binding the buffer
     gl::GenBuffers(1, &mut buffer);
-    ctx
-      .state()
-      .borrow_mut()
-      .bind_array_buffer(buffer, Bind::Forced);
+    state.borrow_mut().bind_array_buffer(buffer, Bind::Forced);
     gl::BufferData(
       gl::ARRAY_BUFFER,
       bytes as isize,
@@ -100,17 +91,16 @@ impl<T> Buffer<T> {
         handle: buffer,
         bytes,
         len,
-        state: ctx.state().clone(),
+        state: state.clone_ownership(),
       },
       _t: PhantomData,
     }
   }
 
   /// Create a buffer out of a slice.
-  pub fn from_slice<C, S>(ctx: &mut C, slice: S) -> Buffer<T>
+  pub fn from_slice<X>(state: &mut GLState, slice: X) -> Buffer<T>
   where
-    C: GraphicsContext<State = GraphicsState>,
-    S: AsRef<[T]>,
+    X: AsRef<[T]>,
   {
     let mut buffer: GLuint = 0;
     let slice = slice.as_ref();
@@ -119,10 +109,7 @@ impl<T> Buffer<T> {
 
     unsafe {
       gl::GenBuffers(1, &mut buffer);
-      ctx
-        .state()
-        .borrow_mut()
-        .bind_array_buffer(buffer, Bind::Cached);
+      state.borrow_mut().bind_array_buffer(buffer, Bind::Cached);
       gl::BufferData(
         gl::ARRAY_BUFFER,
         bytes as isize,
@@ -136,7 +123,7 @@ impl<T> Buffer<T> {
         handle: buffer,
         bytes,
         len,
-        state: ctx.state().clone(),
+        state: state.clone_ownership(),
       },
       _t: PhantomData,
     }
@@ -144,12 +131,11 @@ impl<T> Buffer<T> {
 
   /// Create a new [`Buffer`] with a given number of elements and ininitialize all the elements to
   /// the same value.
-  pub fn repeat<C>(ctx: &mut C, len: usize, value: T) -> Self
+  pub fn repeat(state: &mut GLState, len: usize, value: T) -> Self
   where
-    C: GraphicsContext<State = GraphicsState>,
     T: Copy,
   {
-    let mut buf = unsafe { Self::new(ctx, len) };
+    let mut buf = unsafe { Self::new(state, len) };
     buf.clear(value).unwrap();
     buf
   }
@@ -287,7 +273,7 @@ impl<T> Buffer<T> {
       handle: self.raw.handle,
       bytes: self.raw.bytes,
       len: self.raw.len,
-      state: self.raw.state.clone(),
+      state: self.raw.state.clone_ownership(),
     };
 
     // forget self so that we don’t call drop on it after the function has returned
@@ -326,7 +312,7 @@ pub struct RawBuffer {
   handle: GLuint,
   bytes: usize,
   len: usize,
-  state: Rc<RefCell<GraphicsState>>,
+  state: GLState,
 }
 
 impl RawBuffer {
@@ -608,79 +594,80 @@ impl_uniform_block_tuple!(A, B, C, D, E, F, G, H);
 impl_uniform_block_tuple!(A, B, C, D, E, F, G, H, I);
 impl_uniform_block_tuple!(A, B, C, D, E, F, G, H, I, J);
 
-impl<'sliced, C, T> BufferBackend<'sliced, C, T> for Buffer<T>
-where
-  C: GraphicsContext<State = GraphicsState>,
-  T: 'sliced,
-{
-  type Slice = BufferSlice<'sliced, T>;
-
-  type SliceMut = BufferSliceMut<'sliced, T>;
-
+impl<T> BufferBackend<GLState, T> for Buffer<T> {
   type Err = BufferError;
 
-  unsafe fn new(ctx: &mut C, len: usize) -> Self {
-    Buffer::new(ctx, len)
+  unsafe fn new(state: &mut GLState, len: usize) -> Self {
+    Buffer::new(state, len)
   }
 
-  fn from_slice<S>(ctx: &mut C, slice: S) -> Self
+  fn from_slice<X>(state: &mut GLState, slice: X) -> Self
   where
-    S: AsRef<[T]>,
+    X: AsRef<[T]>,
   {
-    Buffer::from_slice(ctx, slice)
+    Buffer::from_slice(state, slice)
   }
 
-  fn repeat(ctx: &mut C, len: usize, value: T) -> Self
+  fn repeat(state: &mut GLState, len: usize, value: T) -> Self
   where
     T: Copy,
   {
-    Buffer::repeat(ctx, len, value)
+    Buffer::repeat(state, len, value)
   }
 
-  fn at(&self, i: usize) -> Option<T>
+  fn at(&self, _: &mut GLState, i: usize) -> Option<T>
   where
     T: Copy,
   {
     Buffer::at(self, i)
   }
 
-  fn whole(&self) -> Vec<T>
+  fn whole(&self, _: &mut GLState) -> Vec<T>
   where
     T: Copy,
   {
     Buffer::whole(self)
   }
 
-  fn set(&mut self, i: usize, x: T) -> Result<(), Self::Err>
+  fn set(&mut self, _: &mut GLState, i: usize, x: T) -> Result<(), Self::Err>
   where
     T: Copy,
   {
     Buffer::set(self, i, x)
   }
 
-  fn write_whole(&mut self, values: &[T]) -> Result<(), Self::Err> {
+  fn write_whole(&mut self, _: &mut GLState, values: &[T]) -> Result<(), Self::Err> {
     Buffer::write_whole(self, values)
   }
 
-  fn clear(&mut self, x: T) -> Result<(), Self::Err>
+  fn clear(&mut self, _: &mut GLState, x: T) -> Result<(), Self::Err>
   where
     T: Copy,
   {
     Buffer::clear(self, x)
   }
 
-  fn fill<V>(&mut self, values: V) -> Result<(), Self::Err>
+  fn fill<V>(&mut self, _: &mut GLState, values: V) -> Result<(), Self::Err>
   where
     V: AsRef<[T]>,
   {
     Buffer::fill(self, values)
   }
+}
 
-  fn as_slice(&'sliced mut self) -> Result<Self::Slice, Self::Err> {
+impl<'a, T> BufferSliceBackend<'a, GLState, T> for Buffer<T>
+where
+  T: 'a,
+{
+  type Slice = BufferSlice<'a, T>;
+
+  type SliceMut = BufferSliceMut<'a, T>;
+
+  fn as_slice(&'a mut self, _: &mut GLState) -> Result<Self::Slice, Self::Err> {
     Buffer::as_slice(self)
   }
 
-  fn as_slice_mut(&'sliced mut self) -> Result<Self::SliceMut, Self::Err> {
+  fn as_slice_mut(&'a mut self, _: &mut GLState) -> Result<Self::SliceMut, Self::Err> {
     Buffer::as_slice_mut(self)
   }
 }

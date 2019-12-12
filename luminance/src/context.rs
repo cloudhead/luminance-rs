@@ -41,7 +41,7 @@ pub unsafe trait GraphicsContext {
   type Builder;
 
   /// Get access to the graphics state of this context.
-  fn state(&self) -> &Rc<RefCell<Self::State>>;
+  fn state(&mut self) -> &mut Self::State;
 
   /// Create a new pipeline builder.
   fn pipeline_builder(&mut self) -> Self::Builder;

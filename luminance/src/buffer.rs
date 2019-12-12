@@ -86,50 +86,48 @@
 //! [`GraphicsContext`]: crate::context::GraphicsContext
 //! [`UniformBlock`]: crate::buffer::UniformBlock
 
+use crate::context::GraphicsContext;
+
 /// A [`Buffer`] is a GPU region you can picture as an array.
 ///
 /// You’re strongly advised to use either [`Buffer::from_slice`] or [`Buffer::repeat`] to create a
 /// [`Buffer`]. The [`Buffer::new`] should only be used if you know what you’re doing.
-pub trait Buffer<'sliced, C, T> {
-  type Slice: 'sliced;
-
-  type SliceMut: 'sliced;
-
+pub trait Buffer<S, T>: Sized {
   type Err;
 
   /// Create a new [`Buffer`] with a given number of elements.
   ///
   /// That function leaves the buffer _uninitialized_, which is `unsafe`. If you prefer not to use
   /// any `unsafe` function, feel free to use [`Buffer::from_slice`] or [`Buffer::repeat`] instead.
-  unsafe fn new(ctx: &mut C, len: usize) -> Self;
+  unsafe fn new(state: &mut S, len: usize) -> Result<Self, Self::Err>;
 
   /// Create a buffer out of a slice.
-  fn from_slice<S>(ctx: &mut C, slice: S) -> Self
+  fn from_slice<X>(state: &mut S, slice: X) -> Result<Self, Self::Err>
   where
-    S: AsRef<[T]>;
+    X: AsRef<[T]>;
 
   /// Create a new [`Buffer`] with a given number of elements and ininitialize all the elements to
   /// the same value.
-  fn repeat(ctx: &mut C, len: usize, value: T) -> Self
+  fn repeat(state: &mut S, len: usize, value: T) -> Result<Self, Self::Err>
   where
     T: Copy;
 
   /// Retrieve an element from the [`Buffer`].
   ///
   /// This version checks boundaries.
-  fn at(&self, i: usize) -> Option<T>
+  fn at(&self, state: &mut S, i: usize) -> Option<T>
   where
     T: Copy;
 
   /// Retrieve the whole content of the [`Buffer`].
-  fn whole(&self) -> Vec<T>
+  fn whole(&self, state: &mut S) -> Vec<T>
   where
     T: Copy;
 
   /// Set a value at a given index in the [`Buffer`].
   ///
   /// This version checks boundaries.
-  fn set(&mut self, i: usize, x: T) -> Result<(), Self::Err>
+  fn set(&mut self, state: &mut S, i: usize, x: T) -> Result<(), Self::Err>
   where
     T: Copy;
 
@@ -140,21 +138,55 @@ pub trait Buffer<'sliced, C, T> {
   /// [`BufferError::TooManyValues`].
   ///
   /// This function won’t write anything on any error.
-  fn write_whole(&mut self, values: &[T]) -> Result<(), Self::Err>;
+  fn write_whole(&mut self, state: &mut S, values: &[T]) -> Result<(), Self::Err>;
 
   /// Fill the [`Buffer`] with a single value.
-  fn clear(&mut self, x: T) -> Result<(), Self::Err>
+  fn clear(&mut self, state: &mut S, x: T) -> Result<(), Self::Err>
   where
     T: Copy;
 
   /// Fill the whole buffer with an array.
-  fn fill<V>(&mut self, values: V) -> Result<(), Self::Err>
+  fn fill<V>(&mut self, state: &mut S, values: V) -> Result<(), Self::Err>
   where
     V: AsRef<[T]>;
 
   /// Obtain an immutable slice view into the buffer.
-  fn as_slice(&'sliced mut self) -> Result<Self::Slice, Self::Err>;
+  fn as_slice<'a>(&'a mut self, state: &mut S) -> Result<Self::Slice, Self::Err>
+  where
+    Self: BufferSlice<'a, S, T>,
+  {
+    <Self as BufferSlice<'a, S, T>>::as_slice(self, state)
+  }
 
   /// Obtain a mutable slice view into the buffer.
-  fn as_slice_mut(&'sliced mut self) -> Result<Self::SliceMut, Self::Err>;
+  fn as_slice_mut<'a>(&'a mut self, state: &mut S) -> Result<Self::SliceMut, Self::Err>
+  where
+    Self: BufferSlice<'a, S, T>,
+  {
+    <Self as BufferSlice<'a, S, T>>::as_slice_mut(self, state)
+  }
+}
+
+pub trait BufferSlice<'a, S, T>: Buffer<S, T> {
+  type Slice: 'a;
+
+  type SliceMut: 'a;
+
+  /// Obtain an immutable slice view into the buffer.
+  fn as_slice(&'a mut self, state: &mut S) -> Result<Self::Slice, Self::Err>;
+
+  /// Obtain a mutable slice view into the buffer.
+  fn as_slice_mut(&'a mut self, state: &mut S) -> Result<Self::SliceMut, Self::Err>;
+}
+
+/// Support of buffer in graphics context.
+pub trait BufferContext<T>: GraphicsContext {
+  type Buffer: Buffer<Self::State, T>;
+
+  fn new_buffer(
+    &mut self,
+    len: usize,
+  ) -> Result<Self::Buffer, <Self::Buffer as Buffer<Self::State, T>>::Err> {
+    unsafe { <Self::Buffer as Buffer<Self::State, T>>::new(self.state(), len) }
+  }
 }
