@@ -86,47 +86,16 @@
 //! [`GraphicsContext`]: crate::context::GraphicsContext
 //! [`UniformBlock`]: crate::buffer::UniformBlock
 
-#[cfg(feature = "std")]
 use std::cell::RefCell;
-#[cfg(feature = "std")]
 use std::cmp::Ordering;
-#[cfg(feature = "std")]
 use std::fmt;
-#[cfg(feature = "std")]
 use std::marker::PhantomData;
-#[cfg(feature = "std")]
 use std::mem;
-#[cfg(feature = "std")]
 use std::ops::{Deref, DerefMut};
-#[cfg(feature = "std")]
 use std::os::raw::c_void;
-#[cfg(feature = "std")]
 use std::ptr;
-#[cfg(feature = "std")]
 use std::rc::Rc;
-#[cfg(feature = "std")]
 use std::slice;
-
-#[cfg(not(feature = "std"))]
-use alloc::rc::Rc;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::cell::RefCell;
-#[cfg(not(feature = "std"))]
-use core::cmp::Ordering;
-#[cfg(not(feature = "std"))]
-use core::fmt;
-#[cfg(not(feature = "std"))]
-use core::marker::PhantomData;
-#[cfg(not(feature = "std"))]
-use core::mem;
-#[cfg(not(feature = "std"))]
-use core::ops::{Deref, DerefMut};
-#[cfg(not(feature = "std"))]
-use core::ptr;
-#[cfg(not(feature = "std"))]
-use core::slice;
 
 use crate::context::GraphicsContext;
 use crate::linear::{M22, M33, M44};
@@ -155,23 +124,21 @@ pub enum BufferError {
 impl fmt::Display for BufferError {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
-      BufferError::Overflow(i, size) => write!(f, "buffer overflow (index = {}, size = {})", i, size),
-
-      BufferError::TooFewValues(nb, size) => {
-        write!(
-          f,
-          "too few values passed to the buffer (nb = {}, size = {})",
-          nb, size
-        )
+      BufferError::Overflow(i, size) => {
+        write!(f, "buffer overflow (index = {}, size = {})", i, size)
       }
 
-      BufferError::TooManyValues(nb, size) => {
-        write!(
-          f,
-          "too many values passed to the buffer (nb = {}, size = {})",
-          nb, size
-        )
-      }
+      BufferError::TooFewValues(nb, size) => write!(
+        f,
+        "too few values passed to the buffer (nb = {}, size = {})",
+        nb, size
+      ),
+
+      BufferError::TooManyValues(nb, size) => write!(
+        f,
+        "too many values passed to the buffer (nb = {}, size = {})",
+        nb, size
+      ),
 
       BufferError::MapFailed => write!(f, "buffer mapping failed"),
     }
@@ -192,15 +159,26 @@ impl<T> Buffer<T> {
   ///
   /// That function leaves the buffer _uninitialized_, which is `unsafe`. If you prefer not to use
   /// any `unsafe` function, feel free to use [`Buffer::from_slice`] or [`Buffer::repeat`] instead.
-  pub unsafe fn new<C>(ctx: &mut C, len: usize) -> Buffer<T> where C: GraphicsContext {
+  pub unsafe fn new<C>(ctx: &mut C, len: usize) -> Buffer<T>
+  where
+    C: GraphicsContext,
+  {
     let mut buffer: GLuint = 0;
     let bytes = mem::size_of::<T>() * len;
 
     // generate a buffer and force binding the handle; this prevent side-effects from previous bound
     // resources to prevent binding the buffer
     gl::GenBuffers(1, &mut buffer);
-    ctx.state().borrow_mut().bind_array_buffer(buffer, Bind::Forced);
-    gl::BufferData(gl::ARRAY_BUFFER, bytes as isize, ptr::null(), gl::STREAM_DRAW);
+    ctx
+      .state()
+      .borrow_mut()
+      .bind_array_buffer(buffer, Bind::Forced);
+    gl::BufferData(
+      gl::ARRAY_BUFFER,
+      bytes as isize,
+      ptr::null(),
+      gl::STREAM_DRAW,
+    );
 
     Buffer {
       raw: RawBuffer {
@@ -214,12 +192,11 @@ impl<T> Buffer<T> {
   }
 
   /// Create a buffer out of a slice.
-  pub fn from_slice<C, S>(
-    ctx: &mut C,
-    slice: S
-  ) -> Buffer<T>
-  where C: GraphicsContext,
-        S: AsRef<[T]> {
+  pub fn from_slice<C, S>(ctx: &mut C, slice: S) -> Buffer<T>
+  where
+    C: GraphicsContext,
+    S: AsRef<[T]>,
+  {
     let mut buffer: GLuint = 0;
     let slice = slice.as_ref();
     let len = slice.len();
@@ -227,7 +204,10 @@ impl<T> Buffer<T> {
 
     unsafe {
       gl::GenBuffers(1, &mut buffer);
-      ctx.state().borrow_mut().bind_array_buffer(buffer, Bind::Cached);
+      ctx
+        .state()
+        .borrow_mut()
+        .bind_array_buffer(buffer, Bind::Cached);
       gl::BufferData(
         gl::ARRAY_BUFFER,
         bytes as isize,
@@ -249,7 +229,11 @@ impl<T> Buffer<T> {
 
   /// Create a new [`Buffer`] with a given number of elements and ininitialize all the elements to
   /// the same value.
-  pub fn repeat<C>(ctx: &mut C, len: usize, value: T) -> Self where C: GraphicsContext, T: Copy {
+  pub fn repeat<C>(ctx: &mut C, len: usize, value: T) -> Self
+  where
+    C: GraphicsContext,
+    T: Copy,
+  {
     let mut buf = unsafe { Self::new(ctx, len) };
     buf.clear(value).unwrap();
     buf
@@ -258,13 +242,20 @@ impl<T> Buffer<T> {
   /// Retrieve an element from the [`Buffer`].
   ///
   /// This version checks boundaries.
-  pub fn at(&self, i: usize) -> Option<T> where T: Copy {
+  pub fn at(&self, i: usize) -> Option<T>
+  where
+    T: Copy,
+  {
     if i >= self.len {
       return None;
     }
 
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::READ_ONLY) as *const T;
 
       let x = *ptr.add(i);
@@ -276,9 +267,16 @@ impl<T> Buffer<T> {
   }
 
   /// Retrieve the whole content of the [`Buffer`].
-  pub fn whole(&self) -> Vec<T> where T: Copy {
+  pub fn whole(&self) -> Vec<T>
+  where
+    T: Copy,
+  {
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::READ_ONLY) as *mut T;
 
       let values = Vec::from_raw_parts(ptr, self.len, self.len);
@@ -292,13 +290,20 @@ impl<T> Buffer<T> {
   /// Set a value at a given index in the [`Buffer`].
   ///
   /// This version checks boundaries.
-  pub fn set(&mut self, i: usize, x: T) -> Result<(), BufferError> where T: Copy {
+  pub fn set(&mut self, i: usize, x: T) -> Result<(), BufferError>
+  where
+    T: Copy,
+  {
     if i >= self.len {
       return Err(BufferError::Overflow(i, self.len));
     }
 
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut T;
 
       *ptr.add(i) = x;
@@ -328,7 +333,11 @@ impl<T> Buffer<T> {
     };
 
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
 
       ptr::copy_nonoverlapping(values.as_ptr() as *const c_void, ptr, real_bytes);
@@ -340,12 +349,18 @@ impl<T> Buffer<T> {
   }
 
   /// Fill the [`Buffer`] with a single value.
-  pub fn clear(&mut self, x: T) -> Result<(), BufferError> where T: Copy {
+  pub fn clear(&mut self, x: T) -> Result<(), BufferError>
+  where
+    T: Copy,
+  {
     self.write_whole(&vec![x; self.len])
   }
 
   /// Fill the whole buffer with an array.
-  pub fn fill<V>(&mut self, values: V) -> Result<(), BufferError> where V: AsRef<[T]> {
+  pub fn fill<V>(&mut self, values: V) -> Result<(), BufferError>
+  where
+    V: AsRef<[T]>,
+  {
     self.write_whole(values.as_ref())
   }
 
@@ -403,7 +418,10 @@ impl RawBuffer {
   /// Obtain an immutable slice view into the buffer.
   pub(crate) fn as_slice<T>(&mut self) -> Result<BufferSlice<T>, BufferError> {
     unsafe {
-      self.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
 
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::READ_ONLY) as *const T;
 
@@ -418,7 +436,10 @@ impl RawBuffer {
   /// Obtain a mutable slice view into the buffer.
   pub(crate) fn as_slice_mut<T>(&mut self) -> Result<BufferSliceMut<T>, BufferError> {
     unsafe {
-      self.state.borrow_mut().bind_array_buffer(self.handle, Bind::Cached);
+      self
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.handle, Bind::Cached);
 
       let ptr = gl::MapBuffer(gl::ARRAY_BUFFER, gl::READ_WRITE) as *mut T;
 
@@ -469,23 +490,36 @@ impl<T> From<Buffer<T>> for RawBuffer {
 /// Such a slice allows you to read the data contained in a buffer directly via a Rust slice.
 /// While a buffer is mapped, the buffer is _sealed_ and no one can use it. You need to drop the
 /// [`BufferSlice`] in order to unlock the buffer.
-pub struct BufferSlice<'a, T> where T: 'a {
+pub struct BufferSlice<'a, T>
+where
+  T: 'a,
+{
   // Borrowed raw buffer.
   raw: &'a RawBuffer,
   // Raw pointer into the GPU memory.
   ptr: *const T,
 }
 
-impl<'a, T> Drop for BufferSlice<'a, T> where T: 'a {
+impl<'a, T> Drop for BufferSlice<'a, T>
+where
+  T: 'a,
+{
   fn drop(&mut self) {
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.raw.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.raw.handle, Bind::Cached);
       gl::UnmapBuffer(gl::ARRAY_BUFFER);
     }
   }
 }
 
-impl<'a, T> Deref for BufferSlice<'a, T> where T: 'a {
+impl<'a, T> Deref for BufferSlice<'a, T>
+where
+  T: 'a,
+{
   type Target = [T];
 
   fn deref(&self) -> &Self::Target {
@@ -493,7 +527,10 @@ impl<'a, T> Deref for BufferSlice<'a, T> where T: 'a {
   }
 }
 
-impl<'a, 'b, T> IntoIterator for &'b BufferSlice<'a, T> where T: 'a {
+impl<'a, 'b, T> IntoIterator for &'b BufferSlice<'a, T>
+where
+  T: 'a,
+{
   type IntoIter = slice::Iter<'b, T>;
   type Item = &'b T;
 
@@ -507,23 +544,36 @@ impl<'a, 'b, T> IntoIterator for &'b BufferSlice<'a, T> where T: 'a {
 /// Such a slice allows you to read the data contained in a buffer directly via a Rust slice.
 /// While a buffer is mapped, the buffer is _sealed_ and no one can use it. You need to drop the
 /// [`BufferSliceMut`] in order to unlock the buffer.
-pub struct BufferSliceMut<'a, T> where T: 'a {
+pub struct BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   // Borrowed buffer.
   raw: &'a RawBuffer,
   // Raw pointer into the GPU memory.
   ptr: *mut T,
 }
 
-impl<'a, T> Drop for BufferSliceMut<'a, T> where T: 'a {
+impl<'a, T> Drop for BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   fn drop(&mut self) {
     unsafe {
-      self.raw.state.borrow_mut().bind_array_buffer(self.raw.handle, Bind::Cached);
+      self
+        .raw
+        .state
+        .borrow_mut()
+        .bind_array_buffer(self.raw.handle, Bind::Cached);
       gl::UnmapBuffer(gl::ARRAY_BUFFER);
     }
   }
 }
 
-impl<'a, 'b, T> IntoIterator for &'b BufferSliceMut<'a, T> where T: 'a {
+impl<'a, 'b, T> IntoIterator for &'b BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   type IntoIter = slice::Iter<'b, T>;
   type Item = &'b T;
 
@@ -532,7 +582,10 @@ impl<'a, 'b, T> IntoIterator for &'b BufferSliceMut<'a, T> where T: 'a {
   }
 }
 
-impl<'a, 'b, T> IntoIterator for &'b mut BufferSliceMut<'a, T> where T: 'a {
+impl<'a, 'b, T> IntoIterator for &'b mut BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   type IntoIter = slice::IterMut<'b, T>;
   type Item = &'b mut T;
 
@@ -541,7 +594,10 @@ impl<'a, 'b, T> IntoIterator for &'b mut BufferSliceMut<'a, T> where T: 'a {
   }
 }
 
-impl<'a, T> Deref for BufferSliceMut<'a, T> where T: 'a {
+impl<'a, T> Deref for BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   type Target = [T];
 
   fn deref(&self) -> &Self::Target {
@@ -549,7 +605,10 @@ impl<'a, T> Deref for BufferSliceMut<'a, T> where T: 'a {
   }
 }
 
-impl<'a, T> DerefMut for BufferSliceMut<'a, T> where T: 'a {
+impl<'a, T> DerefMut for BufferSliceMut<'a, T>
+where
+  T: 'a,
+{
   fn deref_mut(&mut self) -> &mut Self::Target {
     unsafe { slice::from_raw_parts_mut(self.ptr, self.raw.len) }
   }

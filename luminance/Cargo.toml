@@ -15,13 +15,8 @@ edition = "2018"
 [badges]
 maintenance = { status = "actively-developed" }
 
-[features]
-default = ["std"]
-std = ["gl"]
-
-[dependencies.gl]
-version = "0.13"
-optional = true
+[dependencies]
+gl = "0.13"
 
 [dev-dependencies]
 image = "0.22"

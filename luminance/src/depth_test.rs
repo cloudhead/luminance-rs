@@ -1,6 +1,6 @@
 //! Depth test related features.
 
-use gl::types::*;
+use crate::metagl::*;
 
 /// Whether or not depth test should be enabled.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

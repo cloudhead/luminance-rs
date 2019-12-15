@@ -1,18 +1,8 @@
 //! Graphics state.
 
-#[cfg(feature = "std")]
 use std::cell::RefCell;
-#[cfg(feature = "std")]
 use std::fmt;
-#[cfg(feature = "std")]
 use std::marker::PhantomData;
-
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::fmt;
-#[cfg(not(feature = "std"))]
-use core::marker::PhantomData;
 
 use crate::blending::{BlendingState, Equation, Factor};
 use crate::depth_test::{DepthComparison, DepthTest};
@@ -23,7 +13,6 @@ use crate::vertex_restart::VertexRestart;
 // TLS synchronization barrier for `GraphicsState`.
 //
 // Note: disable on no_std.
-#[cfg(feature = "std")]
 thread_local!(static TLS_ACQUIRE_GFX_STATE: RefCell<Option<()>> = RefCell::new(Some(())));
 
 /// The graphics state.
@@ -85,26 +74,18 @@ impl GraphicsState {
   /// > standard library, this function will always return successfully. You have to take extra care
   /// > in this case.
   pub fn new() -> Result<Self, StateQueryError> {
-    #[cfg(feature = "std")]
-    {
-      TLS_ACQUIRE_GFX_STATE.with(|rc| {
-        let mut inner = rc.borrow_mut();
+    TLS_ACQUIRE_GFX_STATE.with(|rc| {
+      let mut inner = rc.borrow_mut();
 
-        match *inner {
-          Some(_) => {
-            inner.take();
-            Self::get_from_context()
-          }
-
-          None => Err(StateQueryError::UnavailableGraphicsState),
+      match *inner {
+        Some(_) => {
+          inner.take();
+          Self::get_from_context()
         }
-      })
-    }
 
-    #[cfg(not(feature = "std"))]
-    {
-      Self::get_from_context()
-    }
+        None => Err(StateQueryError::UnavailableGraphicsState),
+      }
+    })
   }
 
   /// Get a `GraphicsContext` from the current OpenGL context.
@@ -191,7 +172,7 @@ impl GraphicsState {
 
   pub(crate) unsafe fn set_depth_test_comparison(
     &mut self,
-    depth_test_comparison: DepthComparison
+    depth_test_comparison: DepthComparison,
   ) {
     if self.depth_test_comparison != depth_test_comparison {
       gl::DepthFunc(depth_test_comparison.to_glenum());
@@ -317,7 +298,11 @@ impl GraphicsState {
       self.bind_array_buffer(0, Bind::Cached);
     } else if self.bound_element_array_buffer == handle {
       self.bind_element_array_buffer(0, Bind::Cached);
-    } else if let Some(handle_) = self.bound_uniform_buffers.iter_mut().find(|h| **h == handle) {
+    } else if let Some(handle_) = self
+      .bound_uniform_buffers
+      .iter_mut()
+      .find(|h| **h == handle)
+    {
       *handle_ = 0;
     }
   }
@@ -352,7 +337,7 @@ impl GraphicsState {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Bind {
   Forced,
-  Cached
+  Cached,
 }
 
 #[inline]
@@ -416,16 +401,28 @@ impl fmt::Display for StateQueryError {
     match *self {
       StateQueryError::UnavailableGraphicsState => write!(f, "unavailable graphics state"),
       StateQueryError::UnknownBlendingState(ref s) => write!(f, "unknown blending state: {}", s),
-      StateQueryError::UnknownBlendingEquation(ref e) => write!(f, "unknown blending equation: {}", e),
-      StateQueryError::UnknownBlendingSrcFactor(ref k) => write!(f, "unknown blending source factor: {}", k),
+      StateQueryError::UnknownBlendingEquation(ref e) => {
+        write!(f, "unknown blending equation: {}", e)
+      }
+      StateQueryError::UnknownBlendingSrcFactor(ref k) => {
+        write!(f, "unknown blending source factor: {}", k)
+      }
       StateQueryError::UnknownBlendingDstFactor(ref k) => {
         write!(f, "unknown blending destination factor: {}", k)
       }
       StateQueryError::UnknownDepthTestState(ref s) => write!(f, "unknown depth test state: {}", s),
-      StateQueryError::UnknownFaceCullingState(ref s) => write!(f, "unknown face culling state: {}", s),
-      StateQueryError::UnknownFaceCullingOrder(ref o) => write!(f, "unknown face culling order: {}", o),
-      StateQueryError::UnknownFaceCullingMode(ref m) => write!(f, "unknown face culling mode: {}", m),
-      StateQueryError::UnknownVertexRestartState(ref s) => write!(f, "unknown vertex restart state: {}", s),
+      StateQueryError::UnknownFaceCullingState(ref s) => {
+        write!(f, "unknown face culling state: {}", s)
+      }
+      StateQueryError::UnknownFaceCullingOrder(ref o) => {
+        write!(f, "unknown face culling order: {}", o)
+      }
+      StateQueryError::UnknownFaceCullingMode(ref m) => {
+        write!(f, "unknown face culling mode: {}", m)
+      }
+      StateQueryError::UnknownVertexRestartState(ref s) => {
+        write!(f, "unknown vertex restart state: {}", s)
+      }
     }
   }
 }
@@ -462,8 +459,10 @@ unsafe fn get_ctx_blending_factors() -> Result<(Factor, Factor), StateQueryError
   gl::GetIntegerv(gl::BLEND_SRC_RGB, &mut src);
   gl::GetIntegerv(gl::BLEND_DST_RGB, &mut dst);
 
-  let src_k = from_gl_blending_factor(src as GLenum).map_err(StateQueryError::UnknownBlendingSrcFactor)?;
-  let dst_k = from_gl_blending_factor(dst as GLenum).map_err(StateQueryError::UnknownBlendingDstFactor)?;
+  let src_k =
+    from_gl_blending_factor(src as GLenum).map_err(StateQueryError::UnknownBlendingSrcFactor)?;
+  let dst_k =
+    from_gl_blending_factor(dst as GLenum).map_err(StateQueryError::UnknownBlendingDstFactor)?;
 
   Ok((src_k, dst_k))
 }

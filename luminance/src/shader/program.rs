@@ -28,31 +28,11 @@
 //!
 //! You can create a `Program` with its `new` associated function.
 
-#[cfg(feature = "std")]
 use std::ffi::CString;
-#[cfg(feature = "std")]
 use std::fmt;
-#[cfg(feature = "std")]
 use std::marker::PhantomData;
-#[cfg(feature = "std")]
 use std::ops::Deref;
-#[cfg(feature = "std")]
 use std::ptr::null_mut;
-
-#[cfg(not(feature = "std"))]
-use alloc::prelude::ToOwned;
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::fmt::{self, Write};
-#[cfg(not(feature = "std"))]
-use core::marker::PhantomData;
-#[cfg(not(feature = "std"))]
-use core::ops::Deref;
-#[cfg(not(feature = "std"))]
-use core::ptr::null_mut;
 
 use crate::linear::{M22, M33, M44};
 use crate::metagl::*;
@@ -69,9 +49,16 @@ pub struct RawProgram {
 
 impl RawProgram {
   /// Create a new program by attaching shader stages.
-  fn new<'a, T, G>(tess: T, vertex: &Stage, geometry: G, fragment: &Stage) -> Result<Self, ProgramError>
-  where T: Into<Option<(&'a Stage, &'a Stage)>>,
-        G: Into<Option<&'a Stage>> {
+  fn new<'a, T, G>(
+    tess: T,
+    vertex: &Stage,
+    geometry: G,
+    fragment: &Stage,
+  ) -> Result<Self, ProgramError>
+  where
+    T: Into<Option<(&'a Stage, &'a Stage)>>,
+    G: Into<Option<&'a Stage>>,
+  {
     unsafe {
       let handle = gl::CreateProgram();
 
@@ -121,7 +108,6 @@ impl RawProgram {
     }
   }
 
-
   #[inline]
   pub(crate) fn handle(&self) -> GLuint {
     self.handle
@@ -146,7 +132,10 @@ pub struct Program<S, Out, Uni> {
   _out: PhantomData<*const Out>,
 }
 
-impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
+impl<S, Out, Uni> Program<S, Out, Uni>
+where
+  S: Semantics,
+{
   /// Create a new program by consuming `Stage`s.
   pub fn from_stages<'a, T, G>(
     tess: T,
@@ -154,9 +143,11 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
     geometry: G,
     fragment: &Stage,
   ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where Uni: UniformInterface,
-        T: Into<Option<(&'a Stage, &'a Stage)>>,
-        G: Into<Option<&'a Stage>> {
+  where
+    Uni: UniformInterface,
+    T: Into<Option<(&'a Stage, &'a Stage)>>,
+    G: Into<Option<&'a Stage>>,
+  {
     Self::from_stages_env(tess, vertex, geometry, fragment, ())
   }
 
@@ -167,9 +158,11 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
     geometry: G,
     fragment: &str,
   ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where Uni: UniformInterface,
-        T: Into<Option<(&'a str, &'a str)>>,
-        G: Into<Option<&'a str>> {
+  where
+    Uni: UniformInterface,
+    T: Into<Option<(&'a str, &'a str)>>,
+    G: Into<Option<&'a str>>,
+  {
     Self::from_strings_env(tess, vertex, geometry, fragment, ())
   }
 
@@ -181,9 +174,11 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
     fragment: &Stage,
     env: E,
   ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where Uni: UniformInterface<E>,
-        T: Into<Option<(&'a Stage, &'a Stage)>>,
-        G: Into<Option<&'a Stage>> {
+  where
+    Uni: UniformInterface<E>,
+    T: Into<Option<(&'a Stage, &'a Stage)>>,
+    G: Into<Option<&'a Stage>>,
+  {
     let raw = RawProgram::new(tess, vertex, geometry, fragment)?;
 
     let mut warnings = bind_vertex_attribs_locations::<S>(&raw);
@@ -211,15 +206,17 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
     fragment: &str,
     env: E,
   ) -> Result<BuiltProgram<S, Out, Uni>, ProgramError>
-  where Uni: UniformInterface<E>,
-        T: Into<Option<(&'a str, &'a str)>>,
-        G: Into<Option<&'a str>> {
+  where
+    Uni: UniformInterface<E>,
+    T: Into<Option<(&'a str, &'a str)>>,
+    G: Into<Option<&'a str>>,
+  {
     let tess = match tess.into() {
       Some((tcs_str, tes_str)) => {
-        let tcs =
-          Stage::new(stage::Type::TessellationControlShader, tcs_str).map_err(ProgramError::StageError)?;
-        let tes =
-          Stage::new(stage::Type::TessellationEvaluationShader, tes_str).map_err(ProgramError::StageError)?;
+        let tcs = Stage::new(stage::Type::TessellationControlShader, tcs_str)
+          .map_err(ProgramError::StageError)?;
+        let tes = Stage::new(stage::Type::TessellationEvaluationShader, tes_str)
+          .map_err(ProgramError::StageError)?;
         Some((tcs, tes))
       }
       None => None,
@@ -262,7 +259,9 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
   /// shader program updated with the new uniform interface. If the generation of the new uniform
   /// interface fails, this function will return the program with the former uniform interface.
   pub fn adapt<Q>(self) -> Result<BuiltProgram<S, Out, Q>, AdaptationFailure<S, Out, Uni>>
-  where Q: UniformInterface {
+  where
+    Q: UniformInterface,
+  {
     self.adapt_env(())
   }
 
@@ -276,7 +275,9 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
     self,
     env: E,
   ) -> Result<BuiltProgram<S, Out, Q>, AdaptationFailure<S, Out, Uni>>
-  where Q: UniformInterface<E> {
+  where
+    Q: UniformInterface<E>,
+  {
     // first, try to create the new uniform interface
     let new_uni_iface = create_uniform_interface(&self.raw, env);
 
@@ -297,7 +298,10 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
       Err(iface_err) => {
         // we couldn’t generate the new uniform interface; return the error(s) that occurred and the
         // the untouched former program
-        let failure = AdaptationFailure { program: self, error: iface_err };
+        let failure = AdaptationFailure {
+          program: self,
+          error: iface_err,
+        };
         Err(failure)
       }
     }
@@ -307,8 +311,13 @@ impl<S, Out, Uni> Program<S, Out, Uni> where S: Semantics {
   ///
   /// This function might be needed for when you want to update the uniform interface but still
   /// enforce that the type must remain the same.
-  pub fn readapt_env<E>(self, env: E) -> Result<BuiltProgram<S, Out, Uni>, AdaptationFailure<S, Out, Uni>>
-  where Uni: UniformInterface<E> {
+  pub fn readapt_env<E>(
+    self,
+    env: E,
+  ) -> Result<BuiltProgram<S, Out, Uni>, AdaptationFailure<S, Out, Uni>>
+  where
+    Uni: UniformInterface<E>,
+  {
     self.adapt_env(env)
   }
 }
@@ -343,7 +352,7 @@ pub struct AdaptationFailure<S, Out, Uni> {
   /// Program used before trying to adapt.
   pub program: Program<S, Out, Uni>,
   /// Program error that prevented to adapt.
-  pub error: ProgramError
+  pub error: ProgramError,
 }
 
 impl<S, Out, Uni> AdaptationFailure<S, Out, Uni> {
@@ -395,7 +404,9 @@ impl<'a> UniformBuilder<'a> {
   /// one defined in the shader doesn’t type match. If you don’t want a failure but an *unbound*
   /// uniform, head over to the `ask_unbound` function.
   pub fn ask<T>(&self, name: &str) -> Result<Uniform<T>, UniformWarning>
-  where T: Uniformable {
+  where
+    T: Uniformable,
+  {
     let uniform = match T::ty() {
       Type::BufferBinding => self.ask_uniform_block(name)?,
       _ => self.ask_uniform(name)?,
@@ -416,7 +427,9 @@ impl<'a> UniformBuilder<'a> {
   /// That function is useful if you don’t really care about silently sending values down a shader
   /// program and getting them ignored. It might be the case for optional uniforms, for instance.
   pub fn ask_unbound<T>(&mut self, name: &str) -> Uniform<T>
-  where T: Uniformable {
+  where
+    T: Uniformable,
+  {
     match self.ask(name) {
       Ok(uniform) => uniform,
       Err(warning) => {
@@ -427,18 +440,12 @@ impl<'a> UniformBuilder<'a> {
   }
 
   fn ask_uniform<T>(&self, name: &str) -> Result<Uniform<T>, UniformWarning>
-  where T: Uniformable {
+  where
+    T: Uniformable,
+  {
     let location = {
-      #[cfg(feature = "std")]
-      {
-        let c_name = CString::new(name.as_bytes()).unwrap();
-        unsafe { gl::GetUniformLocation(self.raw.handle, c_name.as_ptr() as *const GLchar) }
-      }
-
-      #[cfg(not(feature = "std"))]
-      {
-        unsafe { with_cstring(name, |c_name| gl::GetUniformLocation(self.raw.handle, c_name)).unwrap_or(-1) }
-      }
+      let c_name = CString::new(name.as_bytes()).unwrap();
+      unsafe { gl::GetUniformLocation(self.raw.handle, c_name.as_ptr() as *const GLchar) }
     };
 
     if location < 0 {
@@ -449,21 +456,12 @@ impl<'a> UniformBuilder<'a> {
   }
 
   fn ask_uniform_block<T>(&self, name: &str) -> Result<Uniform<T>, UniformWarning>
-  where T: Uniformable {
+  where
+    T: Uniformable,
+  {
     let location = {
-      #[cfg(feature = "std")]
-      {
-        let c_name = CString::new(name.as_bytes()).unwrap();
-        unsafe { gl::GetUniformBlockIndex(self.raw.handle, c_name.as_ptr() as *const GLchar) }
-      }
-
-      #[cfg(not(feature = "std"))]
-      {
-        unsafe {
-          with_cstring(name, |c_name| gl::GetUniformBlockIndex(self.raw.handle, c_name))
-            .unwrap_or(gl::INVALID_INDEX)
-        }
-      }
+      let c_name = CString::new(name.as_bytes()).unwrap();
+      unsafe { gl::GetUniformBlockIndex(self.raw.handle, c_name.as_ptr() as *const GLchar) }
     };
 
     if location == gl::INVALID_INDEX {
@@ -477,7 +475,10 @@ impl<'a> UniformBuilder<'a> {
   ///
   /// Use that function when you need a uniform to complete a uniform interface but you’re sure you
   /// won’t use it.
-  pub fn unbound<T>(&self) -> Uniform<T> where T: Uniformable {
+  pub fn unbound<T>(&self) -> Uniform<T>
+  where
+    T: Uniformable,
+  {
     Uniform::unbound(self.raw.handle)
   }
 }
@@ -519,7 +520,7 @@ pub enum ProgramError {
   /// type, etc. Check the `UniformWarning` type for more information.
   UniformWarning(UniformWarning),
   /// Some vertex attribute is ill-formed.
-  VertexAttribWarning(VertexAttribWarning)
+  VertexAttribWarning(VertexAttribWarning),
 }
 
 impl fmt::Display for ProgramError {
@@ -529,8 +530,14 @@ impl fmt::Display for ProgramError {
 
       ProgramError::LinkFailed(ref s) => write!(f, "shader program failed to link: {}", s),
 
-      ProgramError::UniformWarning(ref e) => write!(f, "shader program contains uniform warning(s): {}", e),
-      ProgramError::VertexAttribWarning(ref e) => write!(f, "shader program contains vertex attribute warning(s): {}", e),
+      ProgramError::UniformWarning(ref e) => {
+        write!(f, "shader program contains uniform warning(s): {}", e)
+      }
+      ProgramError::VertexAttribWarning(ref e) => write!(
+        f,
+        "shader program contains vertex attribute warning(s): {}",
+        e
+      ),
     }
   }
 }
@@ -568,12 +575,18 @@ pub enum UniformWarning {
 
 impl UniformWarning {
   /// Create an inactive uniform warning.
-  pub fn inactive<N>(name: N) -> Self where N: Into<String> {
+  pub fn inactive<N>(name: N) -> Self
+  where
+    N: Into<String>,
+  {
     UniformWarning::Inactive(name.into())
   }
 
   /// Create a type mismatch.
-  pub fn type_mismatch<N>(name: N, ty: Type) -> Self where N: Into<String> {
+  pub fn type_mismatch<N>(name: N, ty: Type) -> Self
+  where
+    N: Into<String>,
+  {
     UniformWarning::TypeMismatch(name.into(), ty)
   }
 }
@@ -583,7 +596,9 @@ impl fmt::Display for UniformWarning {
     match *self {
       UniformWarning::Inactive(ref s) => write!(f, "inactive {} uniform", s),
 
-      UniformWarning::TypeMismatch(ref n, ref t) => write!(f, "type mismatch for uniform {}: {}", n, t),
+      UniformWarning::TypeMismatch(ref n, ref t) => {
+        write!(f, "type mismatch for uniform {}: {}", n, t)
+      }
     }
   }
 }
@@ -592,13 +607,13 @@ impl fmt::Display for UniformWarning {
 #[derive(Debug)]
 pub enum VertexAttribWarning {
   /// Inactive vertex attribute (not read).
-  Inactive(String)
+  Inactive(String),
 }
 
 impl fmt::Display for VertexAttribWarning {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
-      VertexAttribWarning::Inactive(ref s) => write!(f, "inactive {} vertex attribute", s)
+      VertexAttribWarning::Inactive(ref s) => write!(f, "inactive {} vertex attribute", s),
     }
   }
 }
@@ -612,7 +627,10 @@ pub struct Uniform<T> {
   _t: PhantomData<*const T>,
 }
 
-impl<T> Uniform<T> where T: Uniformable {
+impl<T> Uniform<T>
+where
+  T: Uniformable,
+{
   fn new(program: GLuint, index: GLint) -> Self {
     Uniform {
       program,
@@ -1126,7 +1144,12 @@ unsafe impl Uniformable for [bool; 3] {
 
 unsafe impl Uniformable for [bool; 4] {
   fn update(self, u: &Uniform<Self>) {
-    let v = [self[0] as u32, self[1] as u32, self[2] as u32, self[3] as u32];
+    let v = [
+      self[0] as u32,
+      self[1] as u32,
+      self[2] as u32,
+      self[3] as u32,
+    ];
     unsafe { gl::Uniform4uiv(u.index, 1, &v as *const u32) }
   }
 
@@ -1198,32 +1221,13 @@ fn uniform_type_match(program: GLuint, name: &str, ty: Type) -> Result<(), Unifo
     // get the index of the uniform
     let mut index = 0;
 
-    #[cfg(feature = "std")]
-    {
-      let c_name = CString::new(name.as_bytes()).unwrap();
-      gl::GetUniformIndices(program, 1, [c_name.as_ptr() as *const GLchar].as_ptr(), &mut index);
-    }
-
-    #[cfg(not(feature = "std"))]
-    {
-      let r = with_cstring(name, |c_name| {
-        gl::GetUniformIndices(program, 1, [c_name].as_ptr(), &mut index);
-      });
-
-      if let Err(_) = r {
-        #[cfg(feature = "std")]
-        {
-          return Err(format!("unable to find the index of {}", name));
-        }
-
-        #[cfg(not(feature = "std"))]
-        {
-          let mut reason = String::new();
-          let _ = write!(&mut reason, "unable to find the index of {}", name);
-          return Err(reason);
-        }
-      }
-    }
+    let c_name = CString::new(name.as_bytes()).unwrap();
+    gl::GetUniformIndices(
+      program,
+      1,
+      [c_name.as_ptr() as *const GLchar].as_ptr(),
+      &mut index,
+    );
 
     // get its size and type
     let mut name_ = Vec::<GLchar>::with_capacity(max_len as usize);
@@ -1276,14 +1280,22 @@ fn check_types_match(name: &str, ty: Type, glty: GLuint) -> Result<(), UniformWa
     Type::ISampler1D if glty != gl::INT_SAMPLER_1D => Err(UniformWarning::type_mismatch(name, ty)),
     Type::ISampler2D if glty != gl::INT_SAMPLER_2D => Err(UniformWarning::type_mismatch(name, ty)),
     Type::ISampler3D if glty != gl::INT_SAMPLER_3D => Err(UniformWarning::type_mismatch(name, ty)),
-    Type::UISampler1D if glty != gl::UNSIGNED_INT_SAMPLER_1D => Err(UniformWarning::type_mismatch(name, ty)),
-    Type::UISampler2D if glty != gl::UNSIGNED_INT_SAMPLER_2D => Err(UniformWarning::type_mismatch(name, ty)),
-    Type::UISampler3D if glty != gl::UNSIGNED_INT_SAMPLER_3D => Err(UniformWarning::type_mismatch(name, ty)),
+    Type::UISampler1D if glty != gl::UNSIGNED_INT_SAMPLER_1D => {
+      Err(UniformWarning::type_mismatch(name, ty))
+    }
+    Type::UISampler2D if glty != gl::UNSIGNED_INT_SAMPLER_2D => {
+      Err(UniformWarning::type_mismatch(name, ty))
+    }
+    Type::UISampler3D if glty != gl::UNSIGNED_INT_SAMPLER_3D => {
+      Err(UniformWarning::type_mismatch(name, ty))
+    }
     Type::Sampler1D if glty != gl::SAMPLER_1D => Err(UniformWarning::type_mismatch(name, ty)),
     Type::Sampler2D if glty != gl::SAMPLER_2D => Err(UniformWarning::type_mismatch(name, ty)),
     Type::Sampler3D if glty != gl::SAMPLER_3D => Err(UniformWarning::type_mismatch(name, ty)),
     Type::ICubemap if glty != gl::INT_SAMPLER_CUBE => Err(UniformWarning::type_mismatch(name, ty)),
-    Type::UICubemap if glty != gl::UNSIGNED_INT_SAMPLER_CUBE => Err(UniformWarning::type_mismatch(name, ty)),
+    Type::UICubemap if glty != gl::UNSIGNED_INT_SAMPLER_CUBE => {
+      Err(UniformWarning::type_mismatch(name, ty))
+    }
     Type::Cubemap if glty != gl::SAMPLER_CUBE => Err(UniformWarning::type_mismatch(name, ty)),
     _ => Ok(()),
   }
@@ -1294,16 +1306,18 @@ fn create_uniform_interface<Uni, E>(
   raw: &RawProgram,
   env: E,
 ) -> Result<(Uni, Vec<UniformWarning>), ProgramError>
-where Uni: UniformInterface<E> {
+where
+  Uni: UniformInterface<E>,
+{
   let mut builder = UniformBuilder::new(raw);
   let iface = Uni::uniform_interface(&mut builder, env)?;
   Ok((iface, builder.warnings))
 }
 
-fn bind_vertex_attribs_locations<S>(
-  raw: &RawProgram
-) -> Vec<ProgramWarning>
-where S: Semantics {
+fn bind_vertex_attribs_locations<S>(raw: &RawProgram) -> Vec<ProgramWarning>
+where
+  S: Semantics,
+{
   let mut warnings = Vec::new();
 
   for desc in S::semantics_set() {
@@ -1313,46 +1327,21 @@ where S: Semantics {
 
         // we are not interested in the location as we’re about to change it to what we’ve
         // decided in the semantics
-        #[cfg(feature = "std")]
-        {
-          let c_name = CString::new(desc.name.as_bytes()).unwrap();
-          unsafe { gl::BindAttribLocation(raw.handle, index, c_name.as_ptr() as *const GLchar) };
-        }
-
-        #[cfg(not(feature = "std"))]
-        {
-          unsafe {
-            with_cstring(fmt.name, |c_name| {
-              gl::BindAttribLocation(raw.handle, index, c_name.as_ptr() as *const GLchar);
-            });
-          }
-        }
+        let c_name = CString::new(desc.name.as_bytes()).unwrap();
+        unsafe { gl::BindAttribLocation(raw.handle, index, c_name.as_ptr() as *const GLchar) };
       }
 
-      Err(warning) => warnings.push(ProgramWarning::VertexAttrib(warning))
+      Err(warning) => warnings.push(ProgramWarning::VertexAttrib(warning)),
     }
   }
 
   warnings
 }
 
-fn get_vertex_attrib_location(
-  raw: &RawProgram,
-  name: &str
-) -> Result<GLuint, VertexAttribWarning> {
+fn get_vertex_attrib_location(raw: &RawProgram, name: &str) -> Result<GLuint, VertexAttribWarning> {
   let location = {
-    #[cfg(feature = "std")]
-    {
-      let c_name = CString::new(name.as_bytes()).unwrap();
-      unsafe { gl::GetAttribLocation(raw.handle, c_name.as_ptr() as *const GLchar) }
-    }
-
-    #[cfg(not(feature = "std"))]
-    {
-      unsafe {
-        with_cstring(name, |c_name| gl::GetAttribLocation(raw.handle, c_name)).unwrap_or(-1)
-      }
-    }
+    let c_name = CString::new(name.as_bytes()).unwrap();
+    unsafe { gl::GetAttribLocation(raw.handle, c_name.as_ptr() as *const GLchar) }
   };
 
   if location < 0 {

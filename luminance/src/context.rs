@@ -21,15 +21,8 @@
 //! dynamic branches in the implementation and reduce the number of required safety
 //! checks – enforced at compile time instead.
 
-#[cfg(feature = "std")]
 use std::cell::RefCell;
-#[cfg(feature = "std")]
 use std::rc::Rc;
-
-#[cfg(not(feature = "std"))]
-use alloc::rc::Rc;
-#[cfg(not(feature = "std"))]
-use core::cell::RefCell;
 
 use crate::pipeline::Builder;
 use crate::state::GraphicsState;
