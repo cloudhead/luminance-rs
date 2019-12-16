@@ -393,22 +393,24 @@
 //! [luminance-windowing]: https://crates.io/crates/luminance-windowing
 //! [luminance-glfw]: https://crates.io/crates/luminance-glfw
 
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
+pub mod api;
+pub mod backend;
 pub mod blending;
-pub mod buffer;
+//pub mod buffer;
 pub mod context;
 pub mod depth_test;
 pub mod face_culling;
-pub mod framebuffer;
+//pub mod framebuffer;
 pub mod linear;
 mod metagl;
-pub mod pipeline;
+//pub mod pipeline;
 pub mod pixel;
 pub mod render_state;
-pub mod shader;
-pub mod state;
-pub mod tess;
-pub mod texture;
+//pub mod shader;
+//pub mod state;
+//pub mod tess;
+//pub mod texture;
 pub mod vertex;
 pub mod vertex_restart;
