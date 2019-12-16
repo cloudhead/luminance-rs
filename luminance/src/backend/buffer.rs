@@ -5,19 +5,37 @@
 /// Buffer backend.
 ///
 /// You want to implement that trait on your backend type to support buffers.
-pub unsafe trait Buffer {
+pub unsafe trait Buffer<T> {
   /// The inner representation of the buffer for this backend.
   type Repr;
 
   /// Create a new buffer with a given number of uninitialized elements.
-  unsafe fn new_buffer<T>(&mut self, len: usize) -> Result<Self::Repr, BufferError>;
+  unsafe fn new_buffer(&mut self, len: usize) -> Result<Self::Repr, BufferError>;
 
   /// Create a new buffer from a slice.
-  unsafe fn from_slice<T, S>(&mut self, slice: S) -> Result<Self::Repr, BufferError>
+  unsafe fn from_slice<S>(&mut self, slice: S) -> Result<Self::Repr, BufferError>
   where
     S: AsRef<[T]>;
 
-  unsafe fn repeat<T>(&mut self, buffer: &mut Self::Repr, len: usize, value: T) -> Self
+  unsafe fn repeat(&mut self, len: usize, value: T) -> Result<Self::Repr, BufferError>
+  where
+    T: Copy;
+
+  unsafe fn at(buffer: &Self::Repr, i: usize) -> Option<T>
+  where
+    T: Copy;
+
+  unsafe fn whole(buffer: &Self::Repr) -> Vec<T>
+  where
+    T: Copy;
+
+  unsafe fn set(buffer: &mut Self::Repr, i: usize, x: T) -> Result<(), BufferError>
+  where
+    T: Copy;
+
+  unsafe fn write_whole(buffer: &mut Self::Repr, values: &[T]) -> Result<(), BufferError>;
+
+  unsafe fn clear(buffer: &mut Self::Repr, x: T) -> Result<(), BufferError>
   where
     T: Copy;
 }

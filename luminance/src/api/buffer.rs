@@ -41,4 +41,39 @@ where
       _t: PhantomData,
     })
   }
+
+  pub fn repeat<C>(ctx: &mut C, len: usize, value: T) -> Result<Self, BufferError>
+  where
+    C: GraphicsContext<Backend = S>,
+  {
+    let repr = unsafe { ctx.backend().repeat(len, value)? };
+
+    Ok(Buffer {
+      repr,
+      _t: PhantomData,
+    })
+  }
+
+  pub fn at(&self, i: usize) -> Option<T>
+  where
+    T: Copy,
+  {
+    unsafe { S::at(&self.repr, i) }
+  }
+
+  pub fn whole(&self) -> Vec<T>
+  where
+    T: Copy,
+  {
+    unsafe { S::whole(&self.repr) }
+  }
+
+  pub fn set(&mut self, i: usize, x: T) -> Result<(), BufferError>
+  where
+    T: Copy, {
+      unsafe { S::set(&mut self.repr, i, x) }
+  }
+
+  pub fn write_whole(&mut self, values: &[T]) -> Result<(), BufferError> {
+    unsafe { S::write_whole(&mut self.repr, values)
 }
