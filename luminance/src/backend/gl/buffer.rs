@@ -51,6 +51,12 @@ unsafe impl<T> Buffer<T> for GL {
     })
   }
 
+  unsafe fn destroy_buffer(buffer: &mut Self::Repr) -> Result<(), BufferError> {
+    buffer.state.borrow_mut().unbind_buffer(buffer.handle);
+    gl::DeleteBuffers(1, &buffer.handle);
+    Ok(())
+  }
+
   unsafe fn from_slice<S>(&mut self, slice: S) -> Result<Self::Repr, BufferError>
   where
     S: AsRef<[T]>,

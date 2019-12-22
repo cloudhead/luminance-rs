@@ -14,6 +14,8 @@ pub unsafe trait Buffer<T> {
   /// Create a new buffer with a given number of uninitialized elements.
   unsafe fn new_buffer(&mut self, len: usize) -> Result<Self::Repr, BufferError>;
 
+  unsafe fn destroy_buffer(buffer: &mut Self::Repr) -> Result<(), BufferError>;
+
   /// Create a new buffer from a slice.
   unsafe fn from_slice<S>(&mut self, slice: S) -> Result<Self::Repr, BufferError>
   where

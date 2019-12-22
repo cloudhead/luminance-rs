@@ -13,6 +13,15 @@ where
   _t: PhantomData<T>,
 }
 
+impl<S, T> Drop for Buffer<S, T>
+where
+  S: BufferBackend<T>,
+{
+  fn drop(&mut self) {
+    unsafe { <S as BufferBackend<T>>::destroy_buffer(&mut self.repr).unwrap() };
+  }
+}
+
 impl<S, T> Buffer<S, T>
 where
   S: BufferBackend<T>,
