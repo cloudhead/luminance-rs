@@ -2,14 +2,16 @@
 
 use std::marker::PhantomData;
 
-use crate::backend::buffer::{Buffer as BufferBackend, BufferError};
+use crate::backend::buffer::{
+  Buffer as BufferBackend, BufferError, BufferSlice as BufferSliceBackend,
+};
 use crate::context::GraphicsContext;
 
 pub struct Buffer<S, T>
 where
   S: BufferBackend<T>,
 {
-  repr: S::Repr,
+  repr: S::BufferRepr,
   _t: PhantomData<T>,
 }
 
@@ -94,5 +96,59 @@ where
     T: Copy,
   {
     unsafe { S::clear(&mut self.repr, x) }
+  }
+
+  #[inline(always)]
+  pub fn len(&self) -> usize {
+    unsafe { S::len(&self.repr) }
+  }
+
+  #[inline(always)]
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+}
+
+impl<S, T> Buffer<S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  pub fn slice(&mut self) -> Result<BufferSlice<S, T>, BufferError> {
+    unsafe {
+      S::slice_buffer(&mut self.repr).map(|slice| BufferSlice {
+        slice,
+        _a: PhantomData,
+      })
+    }
+  }
+}
+
+pub struct BufferSlice<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  slice: S::SliceRepr,
+  _a: PhantomData<&'a mut ()>,
+}
+
+impl<'a, S, T> Drop for BufferSlice<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  fn drop(&mut self) {
+    unsafe { S::destroy_buffer_slice(&mut self.slice).unwrap() };
+  }
+}
+
+impl<'a, S, T> BufferSlice<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  pub fn as_slice(&self) -> Result<&[T], BufferError> {
+    unsafe { S::obtain_slice(&self.slice) }
+  }
+
+  pub fn as_slice_mut(&mut self) -> Result<&mut [T], BufferError> {
+    unsafe { S::obtain_slice_mut(&mut self.slice) }
   }
 }
