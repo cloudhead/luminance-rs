@@ -133,54 +133,6 @@ pub enum Mode {
   Patch(usize),
 }
 
-/// Error that can occur while trying to map GPU tessellation to host code.
-#[derive(Debug, Eq, PartialEq)]
-pub enum TessMapError {
-  /// The CPU mapping failed due to buffer errors.
-  VertexBufferMapFailed(BufferError),
-  /// The CPU mapping failed due to buffer errors.
-  IndexBufferMapFailed(BufferError),
-  /// Vertex target type is not the same as the one stored in the buffer.
-  VertexTypeMismatch(VertexDesc, VertexDesc),
-  /// Index target type is not the same as the one stored in the buffer.
-  IndexTypeMismatch(TessIndexType, TessIndexType),
-  /// The CPU mapping failed because you cannot map an attributeless tessellation since it doesn’t
-  /// have any vertex attribute.
-  ForbiddenAttributelessMapping,
-  /// The CPU mapping failed because currently, mapping deinterleaved buffers is not supported via
-  /// a single slice.
-  ForbiddenDeinterleavedMapping,
-}
-
-impl fmt::Display for TessMapError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      TessMapError::VertexBufferMapFailed(ref e) => {
-        write!(f, "cannot map tessellation vertex buffer: {}", e)
-      }
-      TessMapError::IndexBufferMapFailed(ref e) => {
-        write!(f, "cannot map tessellation index buffer: {}", e)
-      }
-      TessMapError::VertexTypeMismatch(ref a, ref b) => write!(
-        f,
-        "cannot map tessellation: vertex type mismatch between {:?} and {:?}",
-        a, b
-      ),
-      TessMapError::IndexTypeMismatch(ref a, ref b) => write!(
-        f,
-        "cannot map tessellation: index type mismatch between {:?} and {:?}",
-        a, b
-      ),
-      TessMapError::ForbiddenAttributelessMapping => {
-        f.write_str("cannot map an attributeless buffer")
-      }
-      TessMapError::ForbiddenDeinterleavedMapping => {
-        f.write_str("cannot map a deinterleaved buffer as interleaved")
-      }
-    }
-  }
-}
-
 struct VertexBuffer {
   /// Indexed format of the buffer.
   fmt: VertexDesc,
