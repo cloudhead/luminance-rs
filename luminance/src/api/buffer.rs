@@ -7,7 +7,7 @@ use crate::context::GraphicsContext;
 
 pub struct Buffer<S, T>
 where
-  S: BufferBackend,
+  S: BufferBackend<T>,
 {
   repr: S::Repr,
   _t: PhantomData<T>,
@@ -15,13 +15,13 @@ where
 
 impl<S, T> Buffer<S, T>
 where
-  S: BufferBackend,
+  S: BufferBackend<T>,
 {
   pub fn new<C>(ctx: &mut C, len: usize) -> Result<Self, BufferError>
   where
     C: GraphicsContext<Backend = S>,
   {
-    let repr = unsafe { ctx.backend().new_buffer::<T>(len)? };
+    let repr = unsafe { ctx.backend().new_buffer(len)? };
 
     Ok(Buffer {
       repr,
@@ -45,6 +45,7 @@ where
   pub fn repeat<C>(ctx: &mut C, len: usize, value: T) -> Result<Self, BufferError>
   where
     C: GraphicsContext<Backend = S>,
+    T: Copy,
   {
     let repr = unsafe { ctx.backend().repeat(len, value)? };
 
@@ -70,10 +71,19 @@ where
 
   pub fn set(&mut self, i: usize, x: T) -> Result<(), BufferError>
   where
-    T: Copy, {
-      unsafe { S::set(&mut self.repr, i, x) }
+    T: Copy,
+  {
+    unsafe { S::set(&mut self.repr, i, x) }
   }
 
   pub fn write_whole(&mut self, values: &[T]) -> Result<(), BufferError> {
-    unsafe { S::write_whole(&mut self.repr, values)
+    unsafe { S::write_whole(&mut self.repr, values) }
+  }
+
+  pub fn clear(&mut self, x: T) -> Result<(), BufferError>
+  where
+    T: Copy,
+  {
+    unsafe { S::clear(&mut self.repr, x) }
+  }
 }
