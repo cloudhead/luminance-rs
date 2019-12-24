@@ -1,9 +1,13 @@
 //! Tessellation API.
 
-use crate::backend::tess::{Mode, TessBuilder as TessBuilderBackend, TessError, TessIndex};
+use crate::backend::tess::{
+  Mode, Tess as TessBackend, TessBuilder as TessBuilderBackend, TessError, TessIndex,
+  TessSlice as TessSliceBackend,
+};
 use crate::context::GraphicsContext;
 use crate::vertex::Vertex;
 
+#[derive(Debug)]
 pub struct TessBuilder<S>
 where
   S: TessBuilderBackend,
@@ -69,4 +73,91 @@ where
   {
     unsafe { S::set_primitive_restart_index(&mut self.repr, index.into()).map(move |_| self) }
   }
+}
+
+impl<S> TessBuilder<S>
+where
+  S: TessBackend,
+{
+  pub fn build(self) -> Result<Tess<S>, TessError> {
+    unsafe { S::build(self.repr).map(|repr| Tess { repr }) }
+  }
+}
+
+#[derive(Debug)]
+pub struct Tess<S>
+where
+  S: TessBackend,
+{
+  repr: S::TessRepr,
+}
+
+impl<S> Drop for Tess<S>
+where
+  S: TessBackend,
+{
+  fn drop(&mut self) {
+    let _ = unsafe { S::destroy_tess(&mut self.repr) };
+  }
+}
+
+impl<S> Tess<S>
+where
+  S: TessBackend,
+{
+  pub fn slice_vertices<T>(&self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: Vertex,
+  {
+    unsafe { S::slice_vertices(&self.repr).map(|repr| TessSlice { repr }) }
+  }
+
+  pub fn slice_vertices_mut<T>(&mut self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: Vertex,
+  {
+    unsafe { S::slice_vertices_mut(&mut self.repr).map(|repr| TessSlice { repr }) }
+  }
+
+  pub fn slice_indices<T>(&self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: TessIndex,
+  {
+    unsafe { S::slice_indices(&self.repr).map(|repr| TessSlice { repr }) }
+  }
+
+  pub fn slice_indices_mut<T>(&mut self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: TessIndex,
+  {
+    unsafe { S::slice_indices_mut(&mut self.repr).map(|repr| TessSlice { repr }) }
+  }
+
+  pub fn slice_instances<T>(&self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: Vertex,
+  {
+    unsafe { S::slice_instances(&self.repr).map(|repr| TessSlice { repr }) }
+  }
+
+  pub fn slice_instances_mut<T>(&mut self) -> Result<TessSlice<S, T>, TessMapError>
+  where
+    Self: TessSliceBackend<T>,
+    T: Vertex,
+  {
+    unsafe { S::slice_instances_mut(&mut self.repr).map(|repr| TessSlice { repr }) }
+  }
+}
+
+#[derive(Debug)]
+pub struct TessSlice<S, T>
+where
+  S: TessSliceBackend<T>,
+{
+  repr: S::SliceRepr,
 }

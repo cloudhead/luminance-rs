@@ -262,4 +262,8 @@ pub unsafe trait TessSlice<T>: Tess {
   ) -> Result<Self::SliceRepr, TessMapError>
   where
     T: Vertex;
+
+  unsafe fn obtain_slice(slice: &Self::SliceRepr) -> Result<&[T], TessMapError>;
+
+  unsafe fn obtain_slice_mut(slice: &mut Self::SliceRepr) -> Result<&mut [T], TessMapError>;
 }

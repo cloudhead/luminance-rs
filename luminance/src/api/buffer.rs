@@ -7,6 +7,7 @@ use crate::backend::buffer::{
 };
 use crate::context::GraphicsContext;
 
+#[derive(Debug)]
 pub struct Buffer<S, T>
 where
   S: BufferBackend<T>,
@@ -20,7 +21,7 @@ where
   S: BufferBackend<T>,
 {
   fn drop(&mut self) {
-    unsafe { <S as BufferBackend<T>>::destroy_buffer(&mut self.repr).unwrap() };
+    let _ = unsafe { <S as BufferBackend<T>>::destroy_buffer(&mut self.repr) };
   }
 }
 
@@ -123,6 +124,7 @@ where
   }
 }
 
+#[derive(Debug)]
 pub struct BufferSlice<'a, S, T>
 where
   S: BufferSliceBackend<T>,
@@ -136,7 +138,7 @@ where
   S: BufferSliceBackend<T>,
 {
   fn drop(&mut self) {
-    unsafe { S::destroy_buffer_slice(&mut self.slice).unwrap() };
+    let _ = unsafe { S::destroy_buffer_slice(&mut self.slice) };
   }
 }
 
