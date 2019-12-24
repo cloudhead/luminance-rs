@@ -149,6 +149,33 @@ where
   pub fn as_slice(&self) -> Result<&[T], BufferError> {
     unsafe { S::obtain_slice(&self.slice) }
   }
+}
+
+#[derive(Debug)]
+pub struct BufferSliceMut<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  slice: S::SliceRepr,
+  _a: PhantomData<&'a mut ()>,
+}
+
+impl<'a, S, T> Drop for BufferSliceMut<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  fn drop(&mut self) {
+    let _ = unsafe { S::destroy_buffer_slice(&mut self.slice) };
+  }
+}
+
+impl<'a, S, T> BufferSliceMut<'a, S, T>
+where
+  S: BufferSliceBackend<T>,
+{
+  pub fn as_slice(&self) -> Result<&[T], BufferError> {
+    unsafe { S::obtain_slice(&self.slice) }
+  }
 
   pub fn as_slice_mut(&mut self) -> Result<&mut [T], BufferError> {
     unsafe { S::obtain_slice_mut(&mut self.slice) }
