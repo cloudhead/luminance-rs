@@ -413,7 +413,7 @@ impl fmt::Display for TextureError {
   }
 }
 
-pub trait Texture<L, D, P>
+pub unsafe trait Texture<L, D, P>
 where
   D: Dimensionable,
   L: Layerable,
@@ -421,20 +421,20 @@ where
 {
   type TextureRepr;
 
-  fn new_texture(
+  unsafe fn new_texture(
     &mut self,
     size: D::Size,
     mipmaps: usize,
     sampler: Sampler,
   ) -> Result<Self::TextureRepr, TextureError>;
 
-  fn destroy_texture(texture: &mut Self::TextureRepr);
+  unsafe fn destroy_texture(texture: &mut Self::TextureRepr);
 
-  fn mipmaps(texture: &Self::TextureRepr) -> usize;
+  unsafe fn mipmaps(texture: &Self::TextureRepr) -> usize;
 
-  fn size(texture: &Self::TextureRepr) -> D::Size;
+  unsafe fn size(texture: &Self::TextureRepr) -> D::Size;
 
-  fn clear_part(
+  unsafe fn clear_part(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     offset: D::Offset,
@@ -442,13 +442,13 @@ where
     pixel: P::Encoding,
   ) -> Result<(), TextureError>;
 
-  fn clear(
+  unsafe fn clear(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     pixel: P::Encoding,
   ) -> Result<(), TextureError>;
 
-  fn upload_part(
+  unsafe fn upload_part(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     offset: D::Offset,
@@ -456,13 +456,13 @@ where
     texels: &[P::Encoding],
   ) -> Result<(), TextureError>;
 
-  fn upload(
+  unsafe fn upload(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     texels: &[P::Encoding],
   ) -> Result<(), TextureError>;
 
-  fn upload_part_raw(
+  unsafe fn upload_part_raw(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     offset: D::Offset,
@@ -470,13 +470,15 @@ where
     texels: &[P::RawEncoding],
   ) -> Result<(), TextureError>;
 
-  fn upload_raw(
+  unsafe fn upload_raw(
     texture: &mut Self::TextureRepr,
     gen_mipmaps: GenMipmaps,
     texels: &[P::RawEncoding],
   ) -> Result<(), TextureError>;
 
-  fn get_raw_texels(texture: &Self::TextureRepr) -> Result<Vec<P::RawEncoding>, TextureError>
+  unsafe fn get_raw_texels(
+    texture: &Self::TextureRepr,
+  ) -> Result<Vec<P::RawEncoding>, TextureError>
   where
     P::RawEncoding: Copy + Default;
 }
