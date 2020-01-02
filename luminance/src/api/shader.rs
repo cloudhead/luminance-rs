@@ -1,6 +1,7 @@
 //! Shader API.
 
-use crate::backend::shader::{Shader, StageError, StageType};
+use crate::backend::shader::Shader;
+use crate::backend::shader_stage::{StageError, StageType};
 use crate::context::GraphicsContext;
 
 pub struct Stage<S>
